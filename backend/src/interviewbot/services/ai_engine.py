@@ -52,24 +52,62 @@ class ClaudeProvider(LLMProvider):
         return response.content[0].text
 
 
+class BonsaiProvider(LLMProvider):
+    """Free frontier models via Bonsai (https://trybons.ai).
+
+    Uses an OpenAI-compatible API that routes to the best available model
+    (GPT-5, Claude, Gemini, etc.) automatically.
+    """
+
+    def __init__(self) -> None:
+        from openai import AsyncOpenAI
+
+        settings = get_settings()
+        self.client = AsyncOpenAI(
+            api_key=settings.bonsai_api_key,
+            base_url=settings.bonsai_base_url,
+        )
+
+    async def chat(self, messages: list[dict[str, str]], temperature: float = 0.7) -> str:
+        response = await self.client.chat.completions.create(
+            model="default",
+            messages=messages,
+            temperature=temperature,
+            max_tokens=1024,
+        )
+        return response.choices[0].message.content or ""
+
+
 class AIEngine:
+    """Multi-provider AI engine with automatic fallback.
+
+    Provider priority: OpenAI -> Bonsai -> Claude.
+    If only one provider is configured, it becomes the primary with no fallback.
+    Bonsai (https://trybons.ai) offers free access to frontier models and
+    is ideal as a primary provider during development or as a fallback.
+    """
+
     def __init__(self) -> None:
         settings = get_settings()
-        self.primary: LLMProvider | None = None
-        self.fallback: LLMProvider | None = None
+        providers: list[LLMProvider] = []
 
         if settings.openai_api_key:
-            self.primary = OpenAIProvider()
+            providers.append(OpenAIProvider())
+        if settings.bonsai_api_key:
+            providers.append(BonsaiProvider())
         if settings.anthropic_api_key:
-            self.fallback = ClaudeProvider()
+            providers.append(ClaudeProvider())
 
-        if not self.primary and self.fallback:
-            self.primary = self.fallback
-            self.fallback = None
+        self.primary: LLMProvider | None = providers[0] if providers else None
+        self.fallback: LLMProvider | None = providers[1] if len(providers) > 1 else None
 
     async def chat(self, messages: list[dict[str, str]], temperature: float = 0.7) -> str:
         if not self.primary:
-            raise RuntimeError("No LLM provider configured. Set OPENAI_API_KEY or ANTHROPIC_API_KEY.")
+            raise RuntimeError(
+                "No LLM provider configured. "
+                "Set BONSAI_API_KEY (free at https://trybons.ai), "
+                "OPENAI_API_KEY, or ANTHROPIC_API_KEY."
+            )
 
         try:
             return await self.primary.chat(messages, temperature)

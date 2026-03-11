@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     elevenlabs_api_key: str = ""
 
+    # Bonsai (free frontier models via OpenAI-compatible API)
+    bonsai_api_key: str = ""
+    bonsai_base_url: str = "https://api.trybons.ai/v1"
+
     # LiveKit
     livekit_api_key: str = ""
     livekit_api_secret: str = ""
