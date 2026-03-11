@@ -3,9 +3,10 @@ from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import pool
-from sqlalchemy.ext.asyncio import async_engine_from_config
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from interviewbot.config import get_settings
+from interviewbot.models.database import _make_connect_args, _strip_sslmode
 from interviewbot.models.tables import Base
 
 config = context.config
@@ -39,12 +40,13 @@ def do_run_migrations(connection) -> None:  # type: ignore[no-untyped-def]
 
 
 async def run_async_migrations() -> None:
-    configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = get_url()
-    connectable = async_engine_from_config(
-        configuration,
-        prefix="sqlalchemy.",
+    raw_url = get_url()
+    url = _strip_sslmode(raw_url)
+    connect_args = _make_connect_args(raw_url)
+    connectable = create_async_engine(
+        url,
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

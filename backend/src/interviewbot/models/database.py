@@ -1,3 +1,5 @@
+import ssl as _ssl
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from interviewbot.config import get_settings
@@ -6,15 +8,34 @@ _engine = None
 _session_factory = None
 
 
+def _make_connect_args(url: str) -> dict:  # type: ignore[type-arg]
+    """Build connect_args for asyncpg when SSL is needed."""
+    if "sslmode=" in url:
+        ctx = _ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = _ssl.CERT_NONE
+        return {"ssl": ctx}
+    return {}
+
+
+def _strip_sslmode(url: str) -> str:
+    """Remove sslmode param from URL (asyncpg uses connect_args instead)."""
+    import re
+    return re.sub(r"[?&]sslmode=[^&]*", "", url)
+
+
 def get_engine():  # type: ignore[no-untyped-def]
     global _engine
     if _engine is None:
         settings = get_settings()
+        url = _strip_sslmode(settings.database_url)
+        connect_args = _make_connect_args(settings.database_url)
         _engine = create_async_engine(
-            settings.database_url,
+            url,
             echo=settings.debug,
             pool_size=10,
             max_overflow=20,
+            connect_args=connect_args,
         )
     return _engine
 
