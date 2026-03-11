@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from interviewbot.dependencies import get_current_user, get_db, get_org_id
+from interviewbot.dependencies import get_db, get_org_id, require_role
 from interviewbot.models.schemas import (
     JobPostingCreateRequest,
     JobPostingResponse,
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/job-postings", tags=["Job Postings"])
 @router.post("", response_model=JobPostingResponse, status_code=status.HTTP_201_CREATED)
 async def create_job_posting(
     req: JobPostingCreateRequest,
-    user: dict = Depends(get_current_user),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager")),  # noqa: B006
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> JobPostingResponse:
@@ -44,7 +44,7 @@ async def create_job_posting(
 async def list_job_postings(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
-    user: dict = Depends(get_current_user),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> PaginatedResponse:
@@ -71,7 +71,7 @@ async def list_job_postings(
 @router.get("/{posting_id}", response_model=JobPostingResponse)
 async def get_job_posting(
     posting_id: UUID,
-    user: dict = Depends(get_current_user),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> JobPostingResponse:
@@ -83,7 +83,7 @@ async def get_job_posting(
 async def update_job_posting(
     posting_id: UUID,
     req: JobPostingUpdateRequest,
-    user: dict = Depends(get_current_user),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager")),  # noqa: B006
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> JobPostingResponse:
@@ -105,7 +105,7 @@ async def update_job_posting(
 @router.delete("/{posting_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_job_posting(
     posting_id: UUID,
-    user: dict = Depends(get_current_user),  # noqa: B006
+    user: dict = Depends(require_role("admin")),  # noqa: B006
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> None:
@@ -117,7 +117,7 @@ async def delete_job_posting(
 @router.post("/{posting_id}/generate-link", response_model=dict)
 async def generate_interview_link(
     posting_id: UUID,
-    user: dict = Depends(get_current_user),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager")),  # noqa: B006
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> dict[str, str]:
@@ -138,7 +138,7 @@ async def generate_interview_link(
 @router.post("/{posting_id}/extract-skills", response_model=dict)
 async def extract_skills(
     posting_id: UUID,
-    user: dict = Depends(get_current_user),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager")),  # noqa: B006
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> dict:

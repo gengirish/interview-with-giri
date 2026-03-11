@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from interviewbot.dependencies import get_current_user, get_db, get_org_id
+from interviewbot.dependencies import get_db, get_org_id, require_role
 from interviewbot.models.schemas import (
     InterviewMessageResponse,
     InterviewSessionResponse,
@@ -27,7 +27,7 @@ async def list_interviews(
     status_filter: str | None = Query(None, alias="status"),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
-    user: dict = Depends(get_current_user),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> PaginatedResponse:
@@ -59,7 +59,7 @@ async def list_interviews(
 @router.get("/{session_id}", response_model=InterviewSessionResponse)
 async def get_interview(
     session_id: UUID,
-    user: dict = Depends(get_current_user),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> InterviewSessionResponse:
@@ -78,7 +78,7 @@ async def get_interview(
 @router.get("/{session_id}/messages", response_model=list[InterviewMessageResponse])
 async def get_interview_messages(
     session_id: UUID,
-    user: dict = Depends(get_current_user),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> list[InterviewMessageResponse]:

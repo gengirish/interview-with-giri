@@ -19,6 +19,7 @@ from interviewbot.routers import (
     interviews,
     job_postings,
     reports,
+    users,
     webhooks,
 )
 from interviewbot.utils.logger import setup_logging
@@ -73,6 +74,7 @@ def create_app() -> FastAPI:
     app.include_router(reports.router, prefix="/api/v1")
     app.include_router(analytics.router, prefix="/api/v1")
     app.include_router(billing.router, prefix="/api/v1")
+    app.include_router(users.router, prefix="/api/v1")
     app.include_router(webhooks.router, prefix="/api/v1")
 
     @app.websocket("/ws/interview/{token}")

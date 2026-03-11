@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from interviewbot.dependencies import get_current_user, get_db, get_org_id
+from interviewbot.dependencies import get_db, get_org_id, require_role
 from interviewbot.models.schemas import CandidateReportResponse, SkillScore, BehavioralScore
 from interviewbot.models.tables import CandidateReport, InterviewSession
 from interviewbot.services.scoring_engine import score_interview
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/reports", tags=["Reports"])
 @router.post("/{session_id}/generate", response_model=CandidateReportResponse)
 async def generate_report(
     session_id: UUID,
-    user: dict = Depends(get_current_user),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager")),  # noqa: B006
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> CandidateReportResponse:
@@ -41,7 +41,7 @@ async def generate_report(
 @router.get("/{session_id}", response_model=CandidateReportResponse)
 async def get_report(
     session_id: UUID,
-    user: dict = Depends(get_current_user),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> CandidateReportResponse:

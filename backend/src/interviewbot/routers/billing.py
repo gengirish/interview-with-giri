@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from interviewbot.config import get_settings
-from interviewbot.dependencies import get_current_user, get_db, get_org_id
+from interviewbot.dependencies import get_db, get_org_id, require_role
 from interviewbot.models.schemas import CheckoutRequest, SubscriptionResponse
 from interviewbot.models.tables import Organization, Subscription
 
@@ -43,7 +43,7 @@ PLAN_CONFIGS = {
 
 @router.get("/subscription", response_model=SubscriptionResponse)
 async def get_subscription(
-    user: dict = Depends(get_current_user),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> SubscriptionResponse:
@@ -82,7 +82,7 @@ async def get_subscription(
 @router.post("/checkout")
 async def create_checkout(
     req: CheckoutRequest,
-    user: dict = Depends(get_current_user),  # noqa: B006
+    user: dict = Depends(require_role("admin")),  # noqa: B006
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> dict:

@@ -203,3 +203,25 @@ class DashboardStats(BaseModel):
     avg_score: float | None
     interviews_this_month: int
     pass_rate: float | None
+
+
+# --- User Management ---
+
+class InviteUserRequest(BaseModel):
+    email: EmailStr
+    full_name: str = Field(..., min_length=2, max_length=255)
+    role: UserRole = UserRole.VIEWER
+    password: str = Field(..., min_length=8)
+
+
+class UserResponse(BaseModel):
+    id: UUID
+    email: str
+    full_name: str
+    role: str
+    is_active: bool
+    created_at: datetime
+
+
+class UpdateUserRoleRequest(BaseModel):
+    role: UserRole

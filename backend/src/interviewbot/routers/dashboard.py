@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from interviewbot.dependencies import get_current_user, get_db, get_org_id
+from interviewbot.dependencies import get_db, get_org_id, require_role
 from interviewbot.models.schemas import DashboardStats
 from interviewbot.models.tables import InterviewSession, JobPosting
 
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 @router.get("/stats", response_model=DashboardStats)
 async def get_dashboard_stats(
-    user: dict = Depends(get_current_user),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> DashboardStats:

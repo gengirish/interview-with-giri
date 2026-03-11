@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Briefcase,
@@ -9,15 +9,30 @@ import {
   MessageSquare,
   Settings,
   LayoutDashboard,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth, type UserRole } from "@/hooks/use-auth";
 
-const navItems = [
+interface NavItem {
+  label: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  roles?: UserRole[];
+}
+
+const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Jobs", href: "/dashboard/jobs", icon: Briefcase },
   { label: "Interviews", href: "/dashboard/interviews", icon: MessageSquare },
   { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
-  { label: "Settings", href: "/dashboard/settings", icon: Settings },
+  {
+    label: "Team",
+    href: "/dashboard/team",
+    icon: Users,
+    roles: ["admin"],
+  },
+  { label: "Settings", href: "/dashboard/settings", icon: Settings, roles: ["admin"] },
 ];
 
 interface SidebarProps {
@@ -26,14 +41,11 @@ interface SidebarProps {
 
 export function Sidebar({ className }: SidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
+  const { role, hasRole, logout } = useAuth();
 
-  function handleLogout() {
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
-    localStorage.removeItem("org_id");
-    router.push("/login");
-  }
+  const visibleItems = navItems.filter(
+    (item) => !item.roles || (role && hasRole(...item.roles)),
+  );
 
   return (
     <aside
@@ -51,7 +63,7 @@ export function Sidebar({ className }: SidebarProps) {
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-4">
-        {navItems.map((item) => {
+        {visibleItems.map((item) => {
           const isActive =
             pathname === item.href ||
             (item.href !== "/dashboard" && pathname?.startsWith(item.href));
@@ -74,8 +86,13 @@ export function Sidebar({ className }: SidebarProps) {
       </nav>
 
       <div className="border-t border-slate-200 p-3">
+        {role && (
+          <div className="mb-2 px-3 text-xs text-slate-400 uppercase tracking-wider">
+            {role.replace("_", " ")}
+          </div>
+        )}
         <button
-          onClick={handleLogout}
+          onClick={logout}
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
         >
           <LogOut className="h-5 w-5" />

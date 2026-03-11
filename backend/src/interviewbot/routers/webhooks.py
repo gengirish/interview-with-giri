@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from interviewbot.dependencies import get_current_user, get_db, get_org_id
+from interviewbot.dependencies import get_db, get_org_id, require_role
 from interviewbot.models.tables import Organization
 
 logger = structlog.get_logger()
@@ -25,7 +25,7 @@ class WebhookConfig(BaseModel):
 
 @router.get("/config")
 async def get_webhook_config(
-    user: dict = Depends(get_current_user),  # noqa: B006
+    user: dict = Depends(require_role("admin")),  # noqa: B006
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> dict:
@@ -43,7 +43,7 @@ async def get_webhook_config(
 @router.post("/config")
 async def update_webhook_config(
     config: WebhookConfig,
-    user: dict = Depends(get_current_user),  # noqa: B006
+    user: dict = Depends(require_role("admin")),  # noqa: B006
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> dict:

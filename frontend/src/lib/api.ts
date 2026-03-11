@@ -164,6 +164,15 @@ export interface CodeExecutionResult {
   exit_code: number | null;
 }
 
+export interface OrgUser {
+  id: string;
+  email: string;
+  full_name: string;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+}
+
 // --- API Client ---
 
 export const api = {
@@ -291,6 +300,29 @@ export const api = {
         body: JSON.stringify(config),
       },
     ),
+
+  // User Management
+  getUsers: () => request<OrgUser[]>("/api/v1/users"),
+  getCurrentUser: () => request<OrgUser>("/api/v1/users/me"),
+  inviteUser: (data: {
+    email: string;
+    full_name: string;
+    role: string;
+    password: string;
+  }) =>
+    request<OrgUser>("/api/v1/users", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateUserRole: (userId: string, role: string) =>
+    request<OrgUser>(`/api/v1/users/${userId}/role`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    }),
+  toggleUserActive: (userId: string) =>
+    request<OrgUser>(`/api/v1/users/${userId}/deactivate`, {
+      method: "PATCH",
+    }),
 
   // Code Execution
   executeCode: (

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { api, type JobPosting } from "@/lib/api";
+import { useAuth } from "@/hooks/use-auth";
 import {
   Plus,
   Copy,
@@ -42,6 +43,9 @@ const defaultForm: FormData = {
 };
 
 export default function JobsPage() {
+  const { hasRole } = useAuth();
+  const canEdit = hasRole("admin", "hiring_manager");
+  const canDelete = hasRole("admin");
   const [jobs, setJobs] = useState<JobPosting[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -141,13 +145,15 @@ export default function JobsPage() {
             Manage positions and generate interview links
           </p>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          New Job
-        </button>
+        {canEdit && (
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            New Job
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -380,41 +386,47 @@ export default function JobsPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-2 ml-4">
-                  <button
-                    onClick={() => handleExtractSkills(job.id)}
-                    disabled={extracting === job.id}
-                    className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
-                    title="AI extract skills from JD"
-                  >
-                    {extracting === job.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-3.5 w-3.5" />
-                    )}
-                    Extract Skills
-                  </button>
-                  <button
-                    onClick={() => handleGenerateLink(job.id)}
-                    className="flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
-                  >
-                    {copiedToken === job.id ? (
-                      <>
-                        <Copy className="h-3.5 w-3.5" />
-                        Copied!
-                      </>
-                    ) : (
-                      <>
-                        <ExternalLink className="h-3.5 w-3.5" />
-                        Generate Link
-                      </>
-                    )}
-                  </button>
-                  <button
-                    onClick={() => handleDelete(job.id)}
-                    className="rounded-lg border border-red-200 p-1.5 text-red-500 hover:bg-red-50 transition-colors"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  {canEdit && (
+                    <button
+                      onClick={() => handleExtractSkills(job.id)}
+                      disabled={extracting === job.id}
+                      className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                      title="AI extract skills from JD"
+                    >
+                      {extracting === job.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-3.5 w-3.5" />
+                      )}
+                      Extract Skills
+                    </button>
+                  )}
+                  {canEdit && (
+                    <button
+                      onClick={() => handleGenerateLink(job.id)}
+                      className="flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
+                    >
+                      {copiedToken === job.id ? (
+                        <>
+                          <Copy className="h-3.5 w-3.5" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          Generate Link
+                        </>
+                      )}
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      onClick={() => handleDelete(job.id)}
+                      className="rounded-lg border border-red-200 p-1.5 text-red-500 hover:bg-red-50 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
