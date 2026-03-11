@@ -14,7 +14,6 @@ import {
   Award,
   AlertTriangle,
   ThumbsUp,
-  ThumbsDown,
   ArrowLeft,
   Sparkles,
 } from "lucide-react";

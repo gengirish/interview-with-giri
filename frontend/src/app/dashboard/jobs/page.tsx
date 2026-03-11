@@ -8,7 +8,6 @@ import {
   Trash2,
   ExternalLink,
   Sparkles,
-  ChevronDown,
   Loader2,
   Briefcase,
 } from "lucide-react";

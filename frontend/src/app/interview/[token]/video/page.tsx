@@ -12,7 +12,6 @@ import {
   Clock,
   AlertTriangle,
   CheckCircle,
-  MonitorUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 

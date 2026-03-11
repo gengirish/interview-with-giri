@@ -5,8 +5,6 @@ import { api, type SubscriptionInfo } from "@/lib/api";
 import {
   Loader2,
   CreditCard,
-  Users,
-  Building,
   Bell,
   Link2,
 } from "lucide-react";

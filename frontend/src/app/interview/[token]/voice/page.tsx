@@ -8,7 +8,6 @@ import {
   MicOff,
   Loader2,
   Clock,
-  MessageSquare,
   AlertTriangle,
   CheckCircle,
   Volume2,
