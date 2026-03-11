@@ -1,13 +1,13 @@
 # Deployment Guide — Interview with Giri
 
-This guide covers deploying the Interview Bot platform using Fly.io, a self-managed VPS, or running locally for development.
+This guide covers deploying the Interview Bot platform using Vercel (frontend) + Fly.io (backend), a self-managed VPS, or running locally for development.
 
 ---
 
 ## Table of Contents
 
 - [Architecture Overview](#architecture-overview)
-- [Option 1: Fly.io (Recommended — Free Tier)](#option-1-flyio-recommended--free-tier)
+- [Option 1: Vercel + Fly.io (Recommended — Free)](#option-1-vercel--flyio-recommended--free)
 - [Option 2: Single VPS with Docker Compose](#option-2-single-vps-with-docker-compose)
 - [Local Development Setup](#local-development-setup)
 - [Environment Variables Reference](#environment-variables-reference)
@@ -24,7 +24,7 @@ This guide covers deploying the Interview Bot platform using Fly.io, a self-mana
 ┌──────────────────┐       ┌──────────────────┐       ┌──────────────┐
 │   Next.js 14     │──────▶│   FastAPI         │──────▶│  PostgreSQL  │
 │   Frontend       │       │   Backend         │       │  16-alpine   │
-│   (Fly.io)       │       │   (Fly.io)        │       │  (Neon)      │
+│   (Vercel)       │       │   (Fly.io)        │       │  (Neon)      │
 └────────┬─────────┘       └────────┬──────────┘       └──────────────┘
          │ WebSocket                │
          └──────────────────────────┤
@@ -36,25 +36,23 @@ This guide covers deploying the Interview Bot platform using Fly.io, a self-mana
                              └──────────────┘
 ```
 
-The platform splits into two deployable units:
-
 | Unit | Technology | Deployed On |
 |------|-----------|-------------|
-| **Frontend** | Next.js 14 (App Router) | Fly.io (Docker) |
-| **Backend** | FastAPI (async Python) + WebSockets | Fly.io (Docker) |
-| **PostgreSQL** | PostgreSQL 16 | Neon (free) or self-hosted |
-| **Redis** | Redis 7 | Upstash (free) or self-hosted |
+| **Frontend** | Next.js 14 (App Router) | [Vercel](https://vercel.com) |
+| **Backend** | FastAPI (async Python) + WebSockets | [Fly.io](https://fly.io) |
+| **PostgreSQL** | PostgreSQL 16 | [Neon](https://neon.tech) (free) or self-hosted |
+| **Redis** | Redis 7 | [Upstash](https://upstash.com) (free) or self-hosted |
 
 ---
 
-## Option 1: Fly.io (Recommended — Free Tier)
+## Option 1: Vercel + Fly.io (Recommended — Free)
 
 **Total cost: $0** for development and demo usage.
 
 | Component | Service | Free Tier |
 |-----------|---------|-----------|
-| Frontend | [Fly.io](https://fly.io) | 3 shared VMs, 256 MB each |
-| Backend | [Fly.io](https://fly.io) | (shared with frontend quota) |
+| Frontend | [Vercel](https://vercel.com) | Unlimited hobby projects |
+| Backend | [Fly.io](https://fly.io) | 3 shared VMs, 256 MB each |
 | PostgreSQL | [Neon](https://neon.tech) | 0.5 GB storage, always-on |
 | Redis | [Upstash](https://upstash.com) | 10,000 commands/day |
 
@@ -86,7 +84,9 @@ The platform splits into two deployable units:
    ```
    Note the `rediss://` (with double-s) — this uses TLS, which Upstash requires.
 
-### Step 2 — Install Fly CLI
+### Step 2 — Deploy Backend to Fly.io
+
+#### Install Fly CLI
 
 ```bash
 # Windows (PowerShell)
@@ -102,7 +102,7 @@ Authenticate:
 fly auth login
 ```
 
-### Step 3 — Deploy Backend to Fly.io
+#### Create and deploy
 
 ```bash
 cd backend
@@ -117,8 +117,8 @@ fly secrets set \
   JWT_SECRET="$(openssl rand -hex 32)" \
   BONSAI_API_KEY="your-bonsai-key" \
   BONSAI_BASE_URL="https://api.trybons.ai/v1" \
-  APP_URL="https://interview-with-giri-fe.fly.dev" \
-  CORS_ORIGINS='["https://interview-with-giri-fe.fly.dev"]' \
+  APP_URL="https://interview-with-giri.vercel.app" \
+  CORS_ORIGINS='["https://interview-with-giri.vercel.app"]' \
   --app interview-with-giri-api
 
 # Deploy
@@ -131,63 +131,64 @@ Fly.io will:
 3. Start the FastAPI server on port 8080
 4. Assign a public URL: `https://interview-with-giri-api.fly.dev`
 
-### Step 4 — Deploy Frontend to Fly.io
+### Step 3 — Deploy Frontend to Vercel
 
-The frontend needs its own Fly app running the Next.js Docker image.
+#### Using Vercel CLI
 
 ```bash
+# Install Vercel CLI
+npm install -g vercel
+
+# Login (opens browser)
+vercel login
+
+# Deploy from the frontend directory
 cd frontend
-
-# Create the app
-fly apps create interview-with-giri-fe --org personal
-
-# Deploy with build args pointing to the backend
-fly deploy \
-  --app interview-with-giri-fe \
-  --build-arg NEXT_PUBLIC_API_URL=https://interview-with-giri-api.fly.dev \
-  --build-arg NEXT_PUBLIC_WS_URL=wss://interview-with-giri-api.fly.dev \
-  --dockerfile Dockerfile
+vercel --prod \
+  -e NEXT_PUBLIC_API_URL=https://interview-with-giri-api.fly.dev \
+  -e NEXT_PUBLIC_WS_URL=wss://interview-with-giri-api.fly.dev
 ```
 
-If `fly.toml` doesn't exist in `frontend/`, Fly auto-generates one. You can also create it manually:
+#### Using Vercel Dashboard
 
-```toml
-app = "interview-with-giri-fe"
-primary_region = "iad"
+1. Go to [vercel.com](https://vercel.com) and click **"Add New Project"**
+2. Import the `interview-with-giri` GitHub repository
+3. Configure:
+   - **Root Directory**: `frontend`
+   - **Framework Preset**: Next.js (auto-detected)
+4. Add environment variables:
+   ```
+   NEXT_PUBLIC_API_URL=https://interview-with-giri-api.fly.dev
+   NEXT_PUBLIC_WS_URL=wss://interview-with-giri-api.fly.dev
+   ```
+5. Click **Deploy**
+6. Vercel gives you a URL like `https://interview-with-giri.vercel.app`
 
-[build]
-  dockerfile = "Dockerfile"
+#### Set env vars permanently (CLI)
 
-[env]
-  NODE_ENV = "production"
-  DOCKER_BUILD = "1"
-
-[http_service]
-  internal_port = 3000
-  force_https = true
-  auto_stop_machines = "suspend"
-  auto_start_machines = true
-  min_machines_running = 0
-
-[[vm]]
-  size = "shared-cpu-1x"
-  memory = "512mb"
+```bash
+vercel env add NEXT_PUBLIC_API_URL production    # paste: https://interview-with-giri-api.fly.dev
+vercel env add NEXT_PUBLIC_WS_URL production     # paste: wss://interview-with-giri-api.fly.dev
 ```
 
-### Step 5 — Update CORS on the Backend
+Then future deploys only need `vercel --prod`.
 
-Once both apps are deployed, update the backend secrets with the actual frontend URL:
+> **Important**: `NEXT_PUBLIC_*` variables are baked in at build time. If you change them, you must redeploy.
+
+### Step 4 — Update CORS on Fly.io
+
+Once Vercel gives you the final URL, update the backend:
 
 ```bash
 fly secrets set \
-  APP_URL="https://interview-with-giri-fe.fly.dev" \
-  CORS_ORIGINS='["https://interview-with-giri-fe.fly.dev"]' \
+  APP_URL="https://interview-with-giri.vercel.app" \
+  CORS_ORIGINS='["https://interview-with-giri.vercel.app"]' \
   --app interview-with-giri-api
 ```
 
 Fly.io auto-redeploys after secrets change.
 
-### Step 6 — Verify
+### Step 5 — Verify
 
 ```bash
 # Backend health check
@@ -209,18 +210,32 @@ curl -X POST https://interview-with-giri-api.fly.dev/api/v1/auth/login \
   -d '{"email": "test@example.com", "password": "password123"}'
 ```
 
-Open `https://interview-with-giri-fe.fly.dev` in a browser to use the full UI.
+Open your Vercel URL in a browser to use the full UI.
+
+### How It Works
+
+The `next.config.mjs` uses [rewrites](https://nextjs.org/docs/app/api-reference/next-config-js/rewrites) to proxy `/api/*` and `/ws/*` requests from the Vercel frontend to the Fly.io backend:
+
+```javascript
+async rewrites() {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+  return [
+    { source: "/api/:path*", destination: `${apiUrl}/api/:path*` },
+    { source: "/ws/:path*",  destination: `${apiUrl.replace("http", "ws")}/ws/:path*` },
+  ];
+}
+```
+
+The `output: "standalone"` option is only enabled when `DOCKER_BUILD=1` is set (Docker builds), so Vercel uses its default optimized output.
 
 ### Custom Domain
 
 ```bash
-# Add a custom domain to the frontend app
-fly certs create yourdomain.com --app interview-with-giri-fe
+# Vercel — add custom domain via dashboard or CLI
+vercel domains add yourdomain.com
 
-# Add a custom domain to the backend app
+# Fly.io — add custom domain for the backend API
 fly certs create api.yourdomain.com --app interview-with-giri-api
-
-# Then update DNS records as shown by the command output
 ```
 
 After setting up custom domains, update CORS:
@@ -232,7 +247,9 @@ fly secrets set \
   --app interview-with-giri-api
 ```
 
-### Useful Fly.io Commands
+### Useful Commands
+
+#### Fly.io (Backend)
 
 | Command | Description |
 |---------|-------------|
@@ -244,19 +261,31 @@ fly secrets set \
 | `fly deploy -a interview-with-giri-api` | Deploy latest changes |
 | `fly apps destroy interview-with-giri-api` | Delete the app |
 
+#### Vercel (Frontend)
+
+| Command | Description |
+|---------|-------------|
+| `vercel` | Preview deployment |
+| `vercel --prod` | Production deployment |
+| `vercel env ls` | List environment variables |
+| `vercel env add VAR_NAME` | Add environment variable |
+| `vercel ls` | List deployments |
+| `vercel logs <url>` | View deployment logs |
+| `vercel inspect <url>` | View deployment details |
+
 ### Redeployment
 
-After code changes, push to Git and redeploy:
+After code changes:
 
 ```bash
-# Backend
+# Backend — redeploy to Fly.io
 cd backend && fly deploy
 
-# Frontend (rebuild with backend URL baked in)
-cd frontend && fly deploy \
-  --build-arg NEXT_PUBLIC_API_URL=https://interview-with-giri-api.fly.dev \
-  --build-arg NEXT_PUBLIC_WS_URL=wss://interview-with-giri-api.fly.dev
+# Frontend — redeploy to Vercel (auto-deploys on git push, or manually)
+cd frontend && vercel --prod
 ```
+
+Vercel also auto-deploys when you push to the `main` branch on GitHub if the project is connected.
 
 ---
 
@@ -518,7 +547,7 @@ The AI engine uses a **provider chain**: OpenAI → Bonsai → Claude. It automa
 | `APP_URL` | Public URL of the frontend | `http://localhost:3000` |
 | `CORS_ORIGINS` | JSON array of allowed origins | `["http://localhost:3000"]` |
 
-### Frontend (Build-Time)
+### Frontend (Build-Time — Vercel)
 
 | Variable | Description |
 |----------|-------------|
@@ -527,7 +556,7 @@ The AI engine uses a **provider chain**: OpenAI → Bonsai → Claude. It automa
 | `NEXT_PUBLIC_LIVEKIT_URL` | LiveKit server URL (for video interviews) |
 | `NEXT_PUBLIC_STRIPE_KEY` | Stripe publishable key |
 
-> Changing any `NEXT_PUBLIC_*` variable requires a **redeploy** of the frontend.
+> Changing any `NEXT_PUBLIC_*` variable requires a **redeploy** on Vercel.
 
 ### Optional Services
 
@@ -569,9 +598,9 @@ On Fly.io, migrations run automatically before each deploy via the `release_comm
 
 ## SSL / HTTPS
 
-### Fly.io (Option 1)
+### Vercel + Fly.io (Option 1)
 
-Fly.io provides **automatic HTTPS** with managed TLS certificates — no configuration needed. Custom domains also get automatic SSL via `fly certs create`.
+Both Vercel and Fly.io provide **automatic HTTPS** with managed TLS certificates — no configuration needed. Custom domains also get automatic SSL.
 
 ### VPS with Docker (Option 2)
 
@@ -615,9 +644,11 @@ All services in `docker-compose.prod.yml` have built-in health checks:
 ### Logs
 
 ```bash
-# Fly.io — stream live logs
+# Fly.io backend — stream live logs
 fly logs -a interview-with-giri-api
-fly logs -a interview-with-giri-fe
+
+# Vercel frontend — view in dashboard or CLI
+vercel logs <deployment-url>
 
 # VPS Docker deployment — view logs
 docker compose -f docker/docker-compose.prod.yml logs -f backend
@@ -630,10 +661,10 @@ docker compose -f docker/docker-compose.prod.yml logs -f frontend
 
 ### "CORS error" in browser console
 
-Your `CORS_ORIGINS` on the backend doesn't include the frontend URL. Update it:
+Your `CORS_ORIGINS` on the backend doesn't include the Vercel frontend URL. Update it:
 
 ```bash
-fly secrets set CORS_ORIGINS='["https://interview-with-giri-fe.fly.dev"]' -a interview-with-giri-api
+fly secrets set CORS_ORIGINS='["https://interview-with-giri.vercel.app"]' -a interview-with-giri-api
 ```
 
 ### Fly.io deploy fails with "release command failed"
@@ -655,8 +686,17 @@ Common causes:
 ### Fly.io build fails with "Readme file does not exist"
 
 The Dockerfile creates a stub `README.md` at `/README.md` to satisfy hatchling. If you see this error, ensure line 20 of `backend/Dockerfile` has:
+
 ```dockerfile
 RUN echo "# Interview Bot" > /README.md && uv sync --frozen --no-dev
+```
+
+### "502 Bad Gateway" on Vercel
+
+The `NEXT_PUBLIC_API_URL` is wrong or the Fly.io backend is down. Verify:
+
+```bash
+curl https://interview-with-giri-api.fly.dev/api/v1/health
 ```
 
 ### "Connection refused" for database
@@ -665,17 +705,17 @@ RUN echo "# Interview Bot" > /README.md && uv sync --frozen --no-dev
 - **Fly.io**: The `DATABASE_URL` must point to the external Neon URL, not `localhost`
 - **Local**: Make sure Docker containers are running (`docker compose -f docker-compose.dev.yml ps`)
 
-### Frontend shows stale API URL
+### Frontend shows stale API URL after changing `NEXT_PUBLIC_API_URL`
 
-`NEXT_PUBLIC_*` variables are baked in at build time. You must redeploy:
+`NEXT_PUBLIC_*` variables are baked in at build time. Trigger a redeploy on Vercel:
 
 ```bash
-cd frontend && fly deploy \
-  --build-arg NEXT_PUBLIC_API_URL=https://interview-with-giri-api.fly.dev \
-  --build-arg NEXT_PUBLIC_WS_URL=wss://interview-with-giri-api.fly.dev
+vercel --prod
 ```
 
-### Machine suspended / slow cold start
+Or go to Vercel dashboard → Deployments → Redeploy.
+
+### Fly.io machine suspended / slow cold start
 
 Fly.io suspends idle machines on the free tier. The first request after suspension takes 3-5 seconds. To keep it always running:
 
@@ -697,8 +737,9 @@ The backend rate-limits auth endpoints (5 signups/min, 10 logins/min per IP). If
 | `backend/fly.toml` | Fly.io backend app config (region, VM, health checks, release command) |
 | `backend/Dockerfile` | Multi-stage Docker build with uv + Alembic |
 | `backend/.dockerignore` | Files excluded from Docker image builds |
-| `frontend/Dockerfile` | Multi-stage Docker build (deps → build → runner) |
+| `frontend/vercel.json` | Vercel build configuration |
 | `frontend/next.config.mjs` | API rewrites + conditional standalone output |
+| `frontend/Dockerfile` | Multi-stage Docker build (for VPS option) |
 | `docker/docker-compose.prod.yml` | Full-stack production Docker Compose (6 services) |
 | `docker/nginx.conf` | Nginx reverse proxy with WebSocket support |
 | `docker-compose.dev.yml` | Dev-only Postgres + Redis |
