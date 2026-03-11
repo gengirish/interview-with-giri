@@ -142,6 +142,77 @@ Frontend runs at **http://localhost:3000**.
 4. Open that link in an incognito window to take the interview as a candidate
 5. After completing, go to **Interviews** in the dashboard to view the transcript and generate an AI report
 
+## Deploy to the Cloud (Free Tier)
+
+The recommended zero-cost deployment splits the stack across free-tier services:
+
+| Component | Service | Free Tier |
+|-----------|---------|-----------|
+| Frontend | [Vercel](https://vercel.com) | Unlimited for hobby |
+| Backend | [Railway](https://railway.app) | 500 hrs/month, $5 credit |
+| PostgreSQL | [Neon](https://neon.tech) | 0.5 GB, always-on |
+| Redis | [Upstash](https://upstash.com) | 10K commands/day |
+
+### Step 1 — Provision databases
+
+**Neon (PostgreSQL)**
+1. Create a project at [neon.tech](https://neon.tech)
+2. Copy the connection string — it looks like `postgresql://user:pass@ep-xxx.us-east-2.aws.neon.tech/neondb`
+3. Append `?sslmode=require` and swap the driver: `postgresql+asyncpg://user:pass@ep-xxx.us-east-2.aws.neon.tech/neondb?sslmode=require`
+
+**Upstash (Redis)**
+1. Create a database at [upstash.com](https://console.upstash.com)
+2. Copy the Redis URL — it looks like `rediss://default:xxx@us1-xxx.upstash.io:6379`
+
+### Step 2 — Deploy backend to Railway
+
+1. Go to [railway.app](https://railway.app) and create a new project
+2. Click **Deploy from GitHub repo** → select `interview-with-giri`
+3. Set **Root Directory** to `backend`
+4. Add these environment variables in the Railway dashboard:
+
+```
+DATABASE_URL=postgresql+asyncpg://...your-neon-url...
+REDIS_URL=rediss://...your-upstash-url...
+JWT_SECRET=<openssl rand -hex 32>
+BONSAI_API_KEY=<your key>
+APP_ENV=production
+CORS_ORIGINS=["https://your-app.vercel.app"]
+APP_URL=https://your-app.vercel.app
+```
+
+5. Railway auto-detects the `Dockerfile` and deploys. Alembic migrations run automatically via the `Procfile` release command.
+6. Note the public URL Railway gives you (e.g. `https://interview-with-giri-production.up.railway.app`).
+
+### Step 3 — Deploy frontend to Vercel
+
+1. Go to [vercel.com](https://vercel.com) and import the GitHub repo
+2. Set **Root Directory** to `frontend`
+3. Set **Framework Preset** to `Next.js`
+4. Add environment variables:
+
+```
+NEXT_PUBLIC_API_URL=https://interview-with-giri-production.up.railway.app
+NEXT_PUBLIC_WS_URL=wss://interview-with-giri-production.up.railway.app
+```
+
+5. Click **Deploy** — Vercel builds and serves the frontend at your `*.vercel.app` domain.
+6. Go back to Railway and update `CORS_ORIGINS` and `APP_URL` with the actual Vercel URL.
+
+### Step 4 — Verify
+
+```bash
+# Health check
+curl https://your-railway-url/api/v1/health
+
+# Sign up
+curl -X POST https://your-railway-url/api/v1/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"org_name":"Test Corp","full_name":"Test User","email":"test@test.com","password":"password123"}'
+```
+
+Then open your Vercel URL in a browser to use the full UI.
+
 ## Full Docker Deployment
 
 To run everything (backend + frontend + databases) in Docker:

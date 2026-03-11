@@ -29,11 +29,14 @@ RUN apt-get update \
 
 COPY --from=base /app/.venv /app/.venv
 COPY --from=base /app/src /app/src
+COPY alembic.ini ./
+COPY alembic/ alembic/
 
 ENV PATH="/app/.venv/bin:$PATH"
 
 RUN groupadd -r appuser && useradd -r -g appuser -s /sbin/nologin appuser
 USER appuser
 
-EXPOSE 8001
-CMD ["uvicorn", "interviewbot.main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2"]
+ENV PORT=8001
+EXPOSE ${PORT}
+CMD uvicorn interviewbot.main:app --host 0.0.0.0 --port ${PORT} --workers 2
