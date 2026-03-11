@@ -7,9 +7,10 @@ This guide covers every deployment option for the Interview Bot platform, from l
 ## Table of Contents
 
 - [Architecture Overview](#architecture-overview)
-- [Option 1: Vercel + Railway (Recommended — Free)](#option-1-vercel--railway-recommended--free)
-- [Option 2: Single VPS with Docker Compose](#option-2-single-vps-with-docker-compose)
-- [Option 3: Render (Alternative PaaS)](#option-3-render-alternative-paas)
+- [Option 1: Vercel + Fly.io (Recommended — Free)](#option-1-vercel--flyio-recommended--free)
+- [Option 2: Vercel + Railway](#option-2-vercel--railway)
+- [Option 3: Single VPS with Docker Compose](#option-3-single-vps-with-docker-compose)
+- [Option 4: Render (Alternative PaaS)](#option-4-render-alternative-paas)
 - [Local Development Setup](#local-development-setup)
 - [Environment Variables Reference](#environment-variables-reference)
 - [Database Migrations](#database-migrations)
@@ -48,7 +49,129 @@ The platform splits cleanly into two deployable units:
 
 ---
 
-## Option 1: Vercel + Railway (Recommended — Free)
+## Option 1: Vercel + Fly.io (Recommended — Free)
+
+**Total cost: $0** for development and demo usage.
+
+| Component | Service | Free Tier |
+|-----------|---------|-----------|
+| Frontend | [Vercel](https://vercel.com) | Unlimited hobby projects |
+| Backend | [Fly.io](https://fly.io) | 3 shared VMs, 256 MB each |
+| PostgreSQL | [Neon](https://neon.tech) | 0.5 GB storage, always-on |
+| Redis | [Upstash](https://upstash.com) | 10,000 commands/day |
+
+### Step 1 — Provision Databases
+
+Follow the [Neon](#neon-postgresql) and [Upstash](#upstash-redis) setup in the databases section below (same for all options).
+
+### Step 2 — Install Fly CLI
+
+```bash
+# Windows (PowerShell)
+pwsh -Command "iwr https://fly.io/install.ps1 -useb | iex"
+
+# macOS / Linux
+curl -L https://fly.io/install.sh | sh
+```
+
+Then authenticate:
+
+```bash
+fly auth login
+```
+
+### Step 3 — Deploy Backend to Fly.io
+
+```bash
+cd backend
+
+# Create the app (first time only)
+fly launch --no-deploy --name interview-with-giri-api --region iad
+
+# Set secrets (environment variables)
+fly secrets set \
+  DATABASE_URL="postgresql+asyncpg://neondb_owner:PASSWORD@ep-xxx.us-east-1.aws.neon.tech/neondb?sslmode=require" \
+  REDIS_URL="rediss://default:TOKEN@xxx.upstash.io:6379" \
+  JWT_SECRET="$(openssl rand -hex 32)" \
+  BONSAI_API_KEY="your-bonsai-key" \
+  BONSAI_BASE_URL="https://api.trybons.ai/v1" \
+  APP_URL="https://your-app.vercel.app" \
+  CORS_ORIGINS='["https://your-app.vercel.app"]'
+
+# Deploy
+fly deploy
+```
+
+Fly.io will:
+1. Build the Docker image from `backend/Dockerfile`
+2. Run `alembic upgrade head` (the `release_command` in `fly.toml`) to apply migrations
+3. Start the FastAPI server on port 8080
+4. Assign a public URL: `https://interview-with-giri-api.fly.dev`
+
+### Step 4 — Deploy Frontend to Vercel
+
+```bash
+cd frontend
+
+# Login (first time only — opens browser)
+vercel login
+
+# Deploy to production with env vars
+vercel --prod \
+  -e NEXT_PUBLIC_API_URL=https://interview-with-giri-api.fly.dev \
+  -e NEXT_PUBLIC_WS_URL=wss://interview-with-giri-api.fly.dev
+```
+
+Or set env vars permanently:
+
+```bash
+vercel env add NEXT_PUBLIC_API_URL production    # paste: https://interview-with-giri-api.fly.dev
+vercel env add NEXT_PUBLIC_WS_URL production     # paste: wss://interview-with-giri-api.fly.dev
+vercel --prod
+```
+
+### Step 5 — Update CORS on Fly.io
+
+Once Vercel gives you the final URL:
+
+```bash
+cd backend
+fly secrets set \
+  APP_URL="https://interview-with-giri.vercel.app" \
+  CORS_ORIGINS='["https://interview-with-giri.vercel.app"]'
+```
+
+Fly.io auto-redeploys after secrets change.
+
+### Step 6 — Verify
+
+```bash
+# Health check
+curl https://interview-with-giri-api.fly.dev/api/v1/health
+
+# Signup
+curl -X POST https://interview-with-giri-api.fly.dev/api/v1/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"org_name":"Test Corp","full_name":"Test User","email":"test@example.com","password":"password123"}'
+```
+
+Open your Vercel URL in a browser to use the full UI.
+
+### Useful Fly.io Commands
+
+| Command | Description |
+|---------|-------------|
+| `fly status` | Check app status and VM info |
+| `fly logs` | Stream live logs |
+| `fly ssh console` | SSH into the running VM |
+| `fly secrets list` | List configured secrets |
+| `fly scale count 2` | Scale to 2 instances |
+| `fly deploy` | Deploy latest changes |
+| `fly apps destroy interview-with-giri-api` | Delete the app |
+
+---
+
+## Option 2: Vercel + Railway
 
 **Total cost: $0** for development and demo usage.
 
@@ -195,7 +318,7 @@ The `output: "standalone"` option is only enabled when `DOCKER_BUILD=1` is set (
 
 ---
 
-## Option 2: Single VPS with Docker Compose
+## Option 3: Single VPS with Docker Compose
 
 Best for: full control, custom domains with SSL, or when you want everything on one server.
 
@@ -365,7 +488,7 @@ Open `https://yourdomain.com` in a browser.
 
 ---
 
-## Option 3: Render (Alternative PaaS)
+## Option 4: Render (Alternative PaaS)
 
 [Render](https://render.com) is another free-tier PaaS that supports Docker deployments.
 
@@ -625,8 +748,10 @@ The backend rate-limits auth endpoints (5 signups/min, 10 logins/min per IP). If
 | `frontend/next.config.mjs` | API rewrites + conditional standalone output |
 | `frontend/Dockerfile` | Multi-stage Docker build (deps → build → runner) |
 | `backend/Dockerfile` | Multi-stage Docker build with uv + Alembic |
+| `backend/fly.toml` | Fly.io app configuration (region, VM size, health checks) |
 | `backend/Procfile` | Railway/Render process definitions |
 | `backend/railway.toml` | Railway-specific build and deploy settings |
+| `backend/.dockerignore` | Files excluded from Docker image builds |
 | `docker/docker-compose.prod.yml` | Full-stack production Docker Compose (6 services) |
 | `docker/nginx.conf` | Nginx reverse proxy with WebSocket support |
 | `docker-compose.dev.yml` | Dev-only Postgres + Redis |
