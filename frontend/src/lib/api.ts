@@ -92,6 +92,43 @@ export interface InterviewMessage {
   created_at: string;
 }
 
+export interface CandidateReport {
+  id: string;
+  session_id: string;
+  candidate_name: string | null;
+  overall_score: number | null;
+  skill_scores: Record<string, { score: number; evidence: string }>;
+  behavioral_scores: Record<string, { score: number; evidence: string }>;
+  ai_summary: string | null;
+  strengths: string[];
+  concerns: string[];
+  recommendation: string | null;
+  confidence_score: number | null;
+  created_at: string;
+}
+
+export interface AnalyticsOverview {
+  total_interviews: number;
+  completed_interviews: number;
+  completion_rate: number;
+  avg_score: number | null;
+  avg_duration_minutes: number | null;
+  score_distribution: Record<string, number>;
+  status_breakdown: Record<string, number>;
+  format_breakdown: Record<string, number>;
+}
+
+export interface JobAnalytics {
+  job_id: string;
+  title: string;
+  role_type: string;
+  is_active: boolean;
+  total_interviews: number;
+  completed_interviews: number;
+  avg_score: number | null;
+  avg_duration_minutes: number | null;
+}
+
 export interface SubscriptionInfo {
   plan_tier: string;
   interviews_limit: number;
@@ -174,6 +211,20 @@ export const api = {
   // Dashboard
   getDashboardStats: () =>
     request<DashboardStats>("/api/v1/dashboard/stats"),
+
+  // Reports
+  generateReport: (sessionId: string) =>
+    request<CandidateReport>(`/api/v1/reports/${sessionId}/generate`, {
+      method: "POST",
+    }),
+  getReport: (sessionId: string) =>
+    request<CandidateReport>(`/api/v1/reports/${sessionId}`),
+
+  // Analytics
+  getAnalyticsOverview: () =>
+    request<AnalyticsOverview>("/api/v1/analytics/overview"),
+  getAnalyticsPerJob: () =>
+    request<JobAnalytics[]>("/api/v1/analytics/per-job"),
 
   // Public Interview
   getPublicInterview: (token: string) =>
