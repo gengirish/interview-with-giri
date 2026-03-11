@@ -3,9 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from interviewbot.config import get_settings
 from interviewbot.middleware.tenant import TenantMiddleware
-from interviewbot.routers import auth, dashboard, health, interviews, job_postings
+from interviewbot.routers import auth, code_execution, dashboard, health, interviews, job_postings
 from interviewbot.utils.logger import setup_logging
 from interviewbot.websocket.chat_handler import handle_text_interview
+from interviewbot.websocket.voice_handler import handle_voice_interview
 
 
 def create_app() -> FastAPI:
@@ -34,6 +35,7 @@ def create_app() -> FastAPI:
     app.include_router(job_postings.router, prefix="/api/v1")
     app.include_router(interviews.router, prefix="/api/v1")
     app.include_router(dashboard.router, prefix="/api/v1")
+    app.include_router(code_execution.router, prefix="/api/v1")
 
     @app.websocket("/ws/interview/{token}")
     async def websocket_interview(websocket: WebSocket, token: str) -> None:
@@ -42,6 +44,14 @@ def create_app() -> FastAPI:
         factory = get_session_factory()
         async with factory() as db:
             await handle_text_interview(websocket, token, db)
+
+    @app.websocket("/ws/voice-interview/{token}")
+    async def websocket_voice_interview(websocket: WebSocket, token: str) -> None:
+        from interviewbot.models.database import get_session_factory
+
+        factory = get_session_factory()
+        async with factory() as db:
+            await handle_voice_interview(websocket, token, db)
 
     return app
 
