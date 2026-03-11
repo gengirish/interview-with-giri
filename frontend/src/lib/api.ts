@@ -84,6 +84,14 @@ export interface DashboardStats {
   pass_rate: number | null;
 }
 
+export interface InterviewMessage {
+  id: string;
+  role: string;
+  content: string;
+  media_url: string | null;
+  created_at: string;
+}
+
 export interface SubscriptionInfo {
   plan_tier: string;
   interviews_limit: number;
@@ -141,14 +149,46 @@ export const api = {
       { method: "POST" },
     ),
 
+  extractSkills: (id: string) =>
+    request<{
+      technical_skills: string[];
+      soft_skills: string[];
+      experience_level: string;
+      suggested_questions: string[];
+    }>(`/api/v1/job-postings/${id}/extract-skills`, { method: "POST" }),
+
+  // Interviews
+  getInterviews: (page = 1, jobId?: string, status?: string) => {
+    const params = new URLSearchParams({ page: String(page) });
+    if (jobId) params.set("job_id", jobId);
+    if (status) params.set("status", status);
+    return request<PaginatedResponse<InterviewSession>>(
+      `/api/v1/interviews?${params}`,
+    );
+  },
+  getInterview: (id: string) =>
+    request<InterviewSession>(`/api/v1/interviews/${id}`),
+  getInterviewMessages: (id: string) =>
+    request<InterviewMessage[]>(`/api/v1/interviews/${id}/messages`),
+
+  // Dashboard
+  getDashboardStats: () =>
+    request<DashboardStats>("/api/v1/dashboard/stats"),
+
   // Public Interview
   getPublicInterview: (token: string) =>
-    request<InterviewSession>(`/api/v1/interviews/public/${token}`),
-  startInterview: (token: string, data: { candidate_name: string; candidate_email: string }) =>
-    request<InterviewSession>(`/api/v1/interviews/public/${token}/start`, {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
+    request<Record<string, unknown>>(`/api/v1/interviews/public/${token}`),
+  startInterview: (
+    token: string,
+    data: { candidate_name: string; candidate_email: string },
+  ) =>
+    request<Record<string, unknown>>(
+      `/api/v1/interviews/public/${token}/start`,
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+    ),
 
   // Billing
   getSubscription: () =>

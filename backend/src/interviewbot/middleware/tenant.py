@@ -18,6 +18,7 @@ PUBLIC_PATHS = {
 
 PUBLIC_PREFIXES = (
     "/api/v1/interviews/public/",
+    "/ws/",
 )
 
 

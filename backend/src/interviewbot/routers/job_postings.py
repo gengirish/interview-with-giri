@@ -135,6 +135,40 @@ async def generate_interview_link(
     return {"token": token, "interview_url": f"/interview/{token}"}
 
 
+@router.post("/{posting_id}/extract-skills", response_model=dict)
+async def extract_skills(
+    posting_id: UUID,
+    user: dict = Depends(get_current_user),  # noqa: B006
+    db: AsyncSession = Depends(get_db),
+    org_id: UUID = Depends(get_org_id),
+) -> dict:
+    posting = await _get_posting_or_404(db, org_id, posting_id)
+
+    from interviewbot.services.ai_engine import AIEngine, SKILL_EXTRACTION_PROMPT
+
+    engine = AIEngine()
+    prompt = SKILL_EXTRACTION_PROMPT.format(job_description=posting.job_description[:3000])
+
+    import json as json_mod
+
+    raw = await engine.chat([{"role": "user", "content": prompt}], temperature=0.3)
+
+    try:
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
+        result = json_mod.loads(cleaned)
+    except json_mod.JSONDecodeError:
+        result = {"technical_skills": [], "soft_skills": [], "error": "Failed to parse AI response"}
+
+    all_skills = result.get("technical_skills", []) + result.get("soft_skills", [])
+    if all_skills:
+        posting.required_skills = all_skills
+        await db.commit()
+
+    return result
+
+
 async def _get_posting_or_404(
     db: AsyncSession, org_id: UUID, posting_id: UUID
 ) -> JobPosting:
