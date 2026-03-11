@@ -151,8 +151,8 @@ async def start_public_interview(
     if not session:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Interview not found")
 
-    if session.status not in ("pending",):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Interview already started or completed")
+    if session.status in ("completed",):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Interview already completed")
 
     session.candidate_name = req.candidate_name
     session.candidate_email = req.candidate_email

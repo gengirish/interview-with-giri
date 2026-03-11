@@ -78,13 +78,68 @@ class BonsaiProvider(LLMProvider):
         return response.choices[0].message.content or ""
 
 
+class GeminiProvider(LLMProvider):
+    """Google Gemini via AI Studio (https://aistudio.google.com).
+
+    Uses Google's OpenAI-compatible endpoint. Free tier: 15 RPM, 1M tokens/day.
+    """
+
+    def __init__(self) -> None:
+        from openai import AsyncOpenAI
+
+        settings = get_settings()
+        self.client = AsyncOpenAI(
+            api_key=settings.gemini_api_key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        )
+        self.model = settings.gemini_model
+
+    async def chat(self, messages: list[dict[str, str]], temperature: float = 0.7) -> str:
+        has_user_msg = any(m["role"] == "user" for m in messages)
+        if not has_user_msg:
+            messages = [*messages, {"role": "user", "content": "Please begin the interview."}]
+
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=1024,
+        )
+        return response.choices[0].message.content or ""
+
+
+class OpenRouterProvider(LLMProvider):
+    """Access many models via OpenRouter (https://openrouter.ai).
+
+    Uses an OpenAI-compatible API. Supports models like openai/gpt-oss-120b,
+    google/gemini-2.0-flash-exp:free, and hundreds more.
+    """
+
+    def __init__(self) -> None:
+        from openai import AsyncOpenAI
+
+        settings = get_settings()
+        self.client = AsyncOpenAI(
+            api_key=settings.openrouter_api_key,
+            base_url=settings.openrouter_base_url,
+        )
+        self.model = settings.openrouter_model
+
+    async def chat(self, messages: list[dict[str, str]], temperature: float = 0.7) -> str:
+        response = await self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=1024,
+        )
+        return response.choices[0].message.content or ""
+
+
 class AIEngine:
     """Multi-provider AI engine with automatic fallback.
 
-    Provider priority: OpenAI -> Bonsai -> Claude.
+    Provider priority: OpenAI -> OpenRouter -> Bonsai -> Claude.
     If only one provider is configured, it becomes the primary with no fallback.
-    Bonsai (https://trybons.ai) offers free access to frontier models and
-    is ideal as a primary provider during development or as a fallback.
     """
 
     def __init__(self) -> None:
@@ -93,6 +148,10 @@ class AIEngine:
 
         if settings.openai_api_key:
             providers.append(OpenAIProvider())
+        if settings.gemini_api_key:
+            providers.append(GeminiProvider())
+        if settings.openrouter_api_key:
+            providers.append(OpenRouterProvider())
         if settings.bonsai_api_key:
             providers.append(BonsaiProvider())
         if settings.anthropic_api_key:

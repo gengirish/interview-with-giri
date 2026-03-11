@@ -27,6 +27,15 @@ class Settings(BaseSettings):
     bonsai_api_key: str = ""
     bonsai_base_url: str = "https://api.trybons.ai/v1"
 
+    # Google Gemini (free tier via AI Studio)
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
+
+    # OpenRouter (access to many models via OpenAI-compatible API)
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_model: str = "openai/gpt-oss-120b"
+
     # LiveKit
     livekit_api_key: str = ""
     livekit_api_secret: str = ""
