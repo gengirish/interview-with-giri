@@ -54,8 +54,12 @@ class Settings(BaseSettings):
     # App
     app_url: str = "http://localhost:3000"
 
-    # CORS
-    cors_origins: list[str] = ["http://localhost:3000"]
+    # CORS (comma-separated string; split via cors_origins_list property)
+    cors_origins: str = "http://localhost:3000"
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     model_config = {
         "env_file": (".env", "../.env"),
