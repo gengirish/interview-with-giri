@@ -1,5 +1,11 @@
-from fastapi import FastAPI, WebSocket
+import traceback
+
+import structlog
+from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from interviewbot.config import get_settings
 from interviewbot.middleware.tenant import TenantMiddleware
@@ -40,6 +46,23 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type"],
     )
     app.add_middleware(TenantMiddleware)
+
+    from interviewbot.routers.auth import limiter
+
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        logger = structlog.get_logger()
+        logger.error(
+            "unhandled_exception",
+            path=str(request.url.path),
+            method=request.method,
+            error=str(exc),
+            traceback=traceback.format_exc(),
+        )
+        return JSONResponse(status_code=500, content={"detail": str(exc)})
 
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(auth.router, prefix="/api/v1")

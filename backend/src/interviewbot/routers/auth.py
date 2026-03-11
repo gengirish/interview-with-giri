@@ -1,9 +1,11 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from jose import jwt
 from passlib.context import CryptContext
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +16,7 @@ from interviewbot.models.tables import Organization, Subscription, User
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+limiter = Limiter(key_func=get_remote_address, default_limits=[], enabled=True)
 
 
 def _create_token(user_id: str, email: str, role: str, org_id: str) -> tuple[str, int]:
@@ -35,7 +38,8 @@ def _create_token(user_id: str, email: str, role: str, org_id: str) -> tuple[str
 
 
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def signup(req: SignupRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+@limiter.limit("5/minute")
+async def signup(request: Request, req: SignupRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     existing = await db.execute(select(User).where(User.email == req.email))
     if existing.scalar_one_or_none():
         raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
@@ -77,7 +81,8 @@ async def signup(req: SignupRequest, db: AsyncSession = Depends(get_db)) -> Toke
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+@limiter.limit("10/minute")
+async def login(request: Request, req: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
     result = await db.execute(select(User).where(User.email == req.email))
     user = result.scalar_one_or_none()
 

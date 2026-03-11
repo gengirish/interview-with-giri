@@ -1,6 +1,10 @@
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from interviewbot.dependencies import get_db
+from interviewbot.models.tables import InterviewSession
 from interviewbot.services.code_executor import ExecutionResult, execute_code
 
 router = APIRouter(prefix="/code", tags=["Code Execution"])
@@ -11,6 +15,7 @@ class CodeSubmission(BaseModel):
     language: str = Field(..., min_length=1)
     stdin: str = ""
     timeout: float = Field(10.0, ge=1.0, le=30.0)
+    interview_token: str = Field(..., min_length=1)
 
 
 class CodeResult(BaseModel):
@@ -23,8 +28,25 @@ class CodeResult(BaseModel):
     exit_code: int | None
 
 
+async def _validate_interview_token(token: str, db: AsyncSession) -> None:
+    from fastapi import HTTPException, status
+
+    result = await db.execute(
+        select(InterviewSession).where(
+            InterviewSession.token == token,
+            InterviewSession.status.in_(("pending", "in_progress")),
+        )
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Invalid or expired interview token")
+
+
 @router.post("/execute", response_model=CodeResult)
-async def run_code(submission: CodeSubmission) -> CodeResult:
+async def run_code(
+    submission: CodeSubmission,
+    db: AsyncSession = Depends(get_db),
+) -> CodeResult:
+    await _validate_interview_token(submission.interview_token, db)
     result = await execute_code(
         source_code=submission.source_code,
         language=submission.language,

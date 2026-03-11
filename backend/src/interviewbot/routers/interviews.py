@@ -156,6 +156,7 @@ async def start_public_interview(
 
     session.candidate_name = req.candidate_name
     session.candidate_email = req.candidate_email
+    session.status = "in_progress"
     session.started_at = datetime.now(timezone.utc)
     await db.commit()
 

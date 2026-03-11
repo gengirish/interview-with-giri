@@ -1,12 +1,13 @@
 INSERT INTO organization (id, name, domain) VALUES
 ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'Demo Corp', 'democorp.com');
 
+-- password for both seed users: demo123456
 INSERT INTO users (org_id, email, password_hash, full_name, role) VALUES
 ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'admin@democorp.com',
- '$2b$12$LJ3m4ys2Y8C.DCgJzz7Yb.TY1vTqXXaGzHJKL5C5C5C5C5C5C5C5e',
+ '$2b$12$EsaDvsZO3NurdDV.zhvBN.GCHV8j7EzAgeknpu7N5PL2HMdGNM18q',
  'Admin User', 'admin'),
 ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'hiring@democorp.com',
- '$2b$12$LJ3m4ys2Y8C.DCgJzz7Yb.TY1vTqXXaGzHJKL5C5C5C5C5C5C5C5e',
+ '$2b$12$EsaDvsZO3NurdDV.zhvBN.GCHV8j7EzAgeknpu7N5PL2HMdGNM18q',
  'Sarah Hiring', 'hiring_manager');
 
 INSERT INTO subscription (org_id, plan_tier, interviews_limit, interviews_used, status) VALUES

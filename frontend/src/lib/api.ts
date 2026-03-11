@@ -139,6 +139,31 @@ export interface SubscriptionInfo {
   status: string;
 }
 
+export interface BillingPlan {
+  id: string;
+  name: string;
+  price_monthly: number;
+  interviews_limit: number;
+  max_users: number;
+  allowed_formats: string[];
+}
+
+export interface WebhookConfig {
+  url: string;
+  events: string[];
+  secret: string;
+}
+
+export interface CodeExecutionResult {
+  stdout: string;
+  stderr: string;
+  compile_output: string;
+  status: string;
+  time: string | null;
+  memory: number | null;
+  exit_code: number | null;
+}
+
 // --- API Client ---
 
 export const api = {
@@ -244,9 +269,43 @@ export const api = {
   // Billing
   getSubscription: () =>
     request<SubscriptionInfo>("/api/v1/billing/subscription"),
-  createCheckout: (planId: string) =>
+  getBillingPlans: () => request<BillingPlan[]>("/api/v1/billing/plans"),
+  createCheckout: (planId: string, successUrl?: string, cancelUrl?: string) =>
     request<{ url: string }>("/api/v1/billing/checkout", {
       method: "POST",
-      body: JSON.stringify({ plan_id: planId }),
+      body: JSON.stringify({
+        plan_id: planId,
+        ...(successUrl && { success_url: successUrl }),
+        ...(cancelUrl && { cancel_url: cancelUrl }),
+      }),
+    }),
+
+  // Webhooks
+  getWebhookConfig: () =>
+    request<{ webhooks: WebhookConfig[] }>("/api/v1/webhooks/config"),
+  addWebhookConfig: (config: WebhookConfig) =>
+    request<{ status: string; webhooks: WebhookConfig[] }>(
+      "/api/v1/webhooks/config",
+      {
+        method: "POST",
+        body: JSON.stringify(config),
+      },
+    ),
+
+  // Code Execution
+  executeCode: (
+    sourceCode: string,
+    language: string,
+    interviewToken: string,
+    stdin = "",
+  ) =>
+    request<CodeExecutionResult>("/api/v1/code/execute", {
+      method: "POST",
+      body: JSON.stringify({
+        source_code: sourceCode,
+        language,
+        interview_token: interviewToken,
+        stdin,
+      }),
     }),
 };
