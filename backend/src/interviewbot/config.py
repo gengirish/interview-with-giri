@@ -40,6 +40,16 @@ class Settings(BaseSettings):
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
 
+    # Email
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    from_email: str = "noreply@interviewbot.ai"
+
+    # App
+    app_url: str = "http://localhost:3000"
+
     # CORS
     cors_origins: list[str] = ["http://localhost:3000"]
 

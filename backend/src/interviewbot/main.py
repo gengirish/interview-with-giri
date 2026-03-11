@@ -3,7 +3,18 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from interviewbot.config import get_settings
 from interviewbot.middleware.tenant import TenantMiddleware
-from interviewbot.routers import analytics, auth, code_execution, dashboard, health, interviews, job_postings, reports
+from interviewbot.routers import (
+    analytics,
+    auth,
+    billing,
+    code_execution,
+    dashboard,
+    health,
+    interviews,
+    job_postings,
+    reports,
+    webhooks,
+)
 from interviewbot.utils.logger import setup_logging
 from interviewbot.websocket.chat_handler import handle_text_interview
 from interviewbot.websocket.voice_handler import handle_voice_interview
@@ -38,6 +49,8 @@ def create_app() -> FastAPI:
     app.include_router(code_execution.router, prefix="/api/v1")
     app.include_router(reports.router, prefix="/api/v1")
     app.include_router(analytics.router, prefix="/api/v1")
+    app.include_router(billing.router, prefix="/api/v1")
+    app.include_router(webhooks.router, prefix="/api/v1")
 
     @app.websocket("/ws/interview/{token}")
     async def websocket_interview(websocket: WebSocket, token: str) -> None:
