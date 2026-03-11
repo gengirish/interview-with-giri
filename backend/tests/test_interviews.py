@@ -56,7 +56,8 @@ async def test_start_public_interview(client):
 
 
 @pytest.mark.asyncio
-async def test_start_interview_twice_returns_400(client):
+async def test_start_interview_twice_allows_restart(client):
+    """Re-starting a non-completed interview is allowed (e.g. after disconnect)."""
     _, _, token = await _setup_job_with_link(client)
     await client.post(
         f"/api/v1/interviews/public/{token}/start",
@@ -66,7 +67,7 @@ async def test_start_interview_twice_returns_400(client):
         f"/api/v1/interviews/public/{token}/start",
         json={"candidate_name": "Jane Doe", "candidate_email": "jane@example.com"},
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 200
 
 
 @pytest.mark.asyncio
