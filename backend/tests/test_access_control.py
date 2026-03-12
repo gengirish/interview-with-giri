@@ -111,6 +111,8 @@ PROTECTED_ENDPOINTS = [
     ("GET", "/api/v1/dashboard/stats"),
     ("GET", "/api/v1/analytics/overview"),
     ("GET", "/api/v1/analytics/per-job"),
+    ("GET", "/api/v1/ats/config"),
+    ("GET", "/api/v1/webhooks/config"),
 ]
 
 
