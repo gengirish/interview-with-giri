@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,7 @@ from interviewbot.models.schemas import (
     PaginatedResponse,
 )
 from interviewbot.models.tables import InterviewMessage, InterviewSession, JobPosting
+from interviewbot.routers.auth import limiter
 
 router = APIRouter(prefix="/interviews", tags=["Interviews"])
 
@@ -112,7 +113,9 @@ async def get_interview_messages(
 
 
 @router.get("/public/{token}")
+@limiter.limit("30/minute")
 async def get_public_interview(
+    request: Request,
     token: str,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -137,7 +140,9 @@ async def get_public_interview(
 
 
 @router.post("/public/{token}/start")
+@limiter.limit("10/minute")
 async def start_public_interview(
+    request: Request,
     token: str,
     req: InterviewStartRequest,
     db: AsyncSession = Depends(get_db),

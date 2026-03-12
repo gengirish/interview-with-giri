@@ -10,6 +10,7 @@ from interviewbot.config import get_settings
 PUBLIC_PATHS = {
     "/api/v1/health",
     "/api/v1/health/db",
+    "/api/v1/health/redis",
     "/api/v1/auth/login",
     "/api/v1/auth/signup",
     "/api/v1/billing/webhook",

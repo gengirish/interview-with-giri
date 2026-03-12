@@ -95,13 +95,30 @@ export default function JobsPage() {
     }
   }
 
+  function getInterviewPath(job: JobPosting | undefined, token: string): string {
+    if (!job) return `/interview/${token}`;
+    const includeCoding = (job.interview_config?.include_coding as boolean) === true;
+    if (includeCoding) return `/interview/${token}/code`;
+    if (job.interview_format === "voice") return `/interview/${token}/voice`;
+    if (job.interview_format === "video") return `/interview/${token}/video`;
+    return `/interview/${token}`;
+  }
+
+  function getLinkLabel(job: JobPosting | undefined): string {
+    if (!job) return "Generate Link";
+    const includeCoding = (job.interview_config?.include_coding as boolean) === true;
+    if (includeCoding) return "Code Interview Link";
+    if (job.interview_format === "voice") return "Voice Interview Link";
+    if (job.interview_format === "video") return "Video Interview Link";
+    return "Text Interview Link";
+  }
+
   async function handleGenerateLink(jobId: string) {
     try {
       const res = await api.generateInterviewLink(jobId);
       const job = jobs.find((j) => j.id === jobId);
-      const formatSuffix =
-        job && job.interview_format !== "text" ? `/${job.interview_format}` : "";
-      const fullUrl = `${window.location.origin}/interview/${res.token}${formatSuffix}`;
+      const path = getInterviewPath(job, res.token);
+      const fullUrl = `${window.location.origin}${path}`;
       await navigator.clipboard.writeText(fullUrl);
       setCopiedToken(jobId);
       setTimeout(() => setCopiedToken(null), 2000);
@@ -426,7 +443,7 @@ export default function JobsPage() {
                       ) : (
                         <>
                           <ExternalLink className="h-3.5 w-3.5" />
-                          Generate Link
+                          {getLinkLabel(job)}
                         </>
                       )}
                     </button>

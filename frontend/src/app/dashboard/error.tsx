@@ -1,30 +1,21 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
-import { useEffect } from "react";
 
-export default function GlobalError({
+export default function DashboardError({
   error,
   reset,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      console.error("[ErrorBoundary]", {
-        message: error.message,
-        digest: error.digest,
-        stack: error.stack,
-      });
-    }
-  }, [error]);
-
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-indigo-50/30 px-4">
+    <div className="flex items-center justify-center min-h-[50vh] px-4">
       <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-        <AlertTriangle className="mx-auto h-10 w-10 text-red-500" />
-        <h1 className="mt-4 text-xl font-semibold text-slate-900">Something went wrong</h1>
+        <AlertTriangle className="mx-auto h-10 w-10 text-amber-500" />
+        <h1 className="mt-4 text-xl font-semibold text-slate-900">
+          Something went wrong
+        </h1>
         <p className="mt-2 text-sm text-slate-500">
           {error.message || "An unexpected error occurred. Please try again."}
         </p>
@@ -32,7 +23,7 @@ export default function GlobalError({
           onClick={reset}
           className="mt-6 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
         >
-          Try again
+          Try Again
         </button>
       </div>
     </div>

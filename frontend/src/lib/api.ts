@@ -1,4 +1,5 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
+const REQUEST_TIMEOUT_MS = 15000;
 
 export class ApiError extends Error {
   constructor(
@@ -9,17 +10,61 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+type RequestOptions = RequestInit & { skipAuthRedirect?: boolean };
+
+async function fetchWithTimeout(
+  url: string,
+  options: RequestOptions & { token: string | null },
+): Promise<Response> {
+  const { skipAuthRedirect, token, ...fetchOptions } = options;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(url, {
+      ...fetchOptions,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(fetchOptions.headers as Record<string, string>),
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (
+      res.status === 401 &&
+      token &&
+      !skipAuthRedirect &&
+      typeof window !== "undefined"
+    ) {
+      localStorage.removeItem("token");
+      localStorage.removeItem("role");
+      localStorage.removeItem("org_id");
+      window.location.href = "/login";
+      throw new ApiError(401, "Unauthorized");
+    }
+
+    return res;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new ApiError(0, "Request timed out");
+    }
+    throw err;
+  }
+}
+
+async function request<T>(
+  path: string,
+  options?: RequestOptions,
+): Promise<T> {
   const token =
     typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetchWithTimeout(`${API_BASE}${path}`, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
-    },
+    token,
   });
 
   if (!res.ok) {
@@ -277,9 +322,10 @@ export const api = {
   exportReportCSVBlob: async (sessionId: string): Promise<Blob> => {
     const token =
       typeof window !== "undefined" ? localStorage.getItem("token") : null;
-    const res = await fetch(`${API_BASE}/api/v1/reports/${sessionId}/export/csv`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    const res = await fetchWithTimeout(
+      `${API_BASE}/api/v1/reports/${sessionId}/export/csv`,
+      { token },
+    );
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new ApiError(

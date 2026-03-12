@@ -5,6 +5,13 @@ import { useCallback, useEffect, useState } from "react";
 
 export type UserRole = "admin" | "hiring_manager" | "viewer";
 
+export function logout() {
+  localStorage.removeItem("token");
+  localStorage.removeItem("role");
+  localStorage.removeItem("org_id");
+  window.location.href = "/login";
+}
+
 export function useAuth() {
   const router = useRouter();
   const [role, setRole] = useState<UserRole | null>(null);
@@ -26,12 +33,9 @@ export function useAuth() {
     [role],
   );
 
-  const logout = useCallback(() => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
-    localStorage.removeItem("org_id");
-    router.push("/login");
-  }, [router]);
+  const logoutFromHook = useCallback(() => {
+    logout();
+  }, []);
 
-  return { role, isAuthenticated, hasRole, logout };
+  return { role, isAuthenticated, hasRole, logout: logoutFromHook };
 }

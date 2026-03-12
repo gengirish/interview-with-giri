@@ -122,9 +122,40 @@ jobs:
         working-directory: frontend
       - run: npm run lint
         working-directory: frontend
+      - run: npx tsc --noEmit
+        working-directory: frontend
       - run: npm run build
         working-directory: frontend
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8001
           NEXT_PUBLIC_LIVEKIT_URL: ws://localhost:7880
           NEXT_PUBLIC_STRIPE_KEY: pk_test_fake
+
+  deploy-backend:
+    needs: [backend-quality, backend-smoke]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only
+        working-directory: backend
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+  deploy-frontend:
+    needs: [frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+        working-directory: frontend
+      - run: npx vercel --prod --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: frontend
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}

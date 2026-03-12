@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import {
   Send,
@@ -18,6 +18,7 @@ type ChatMessage = { role: "interviewer" | "candidate"; content: string };
 
 export default function CandidateInterviewPage() {
   const { token } = useParams<{ token: string }>();
+  const router = useRouter();
   const [phase, setPhase] = useState<Phase>("loading");
   const [jobTitle, setJobTitle] = useState("");
   const [jobDescription, setJobDescription] = useState("");
@@ -35,9 +36,16 @@ export default function CandidateInterviewPage() {
   const [elapsed, setElapsed] = useState(0);
   const [tabSwitches, setTabSwitches] = useState(0);
 
+  const [reconnecting, setReconnecting] = useState(false);
+  const [reconnectFailed, setReconnectFailed] = useState(false);
+
   const wsRef = useRef<WebSocket | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const intentionalCloseRef = useRef(false);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const interviewActiveRef = useRef(false);
 
   useEffect(() => {
     async function load() {
@@ -47,10 +55,25 @@ export default function CandidateInterviewPage() {
           setPhase("completed");
           return;
         }
+        const config = (data.interview_config as Record<string, unknown>) || {};
+        const includeCoding = config.include_coding === true;
+        const format = (data.format as string) || "text";
+        if (includeCoding) {
+          router.replace(`/interview/${token}/code`);
+          return;
+        }
+        if (format === "voice") {
+          router.replace(`/interview/${token}/voice`);
+          return;
+        }
+        if (format === "video") {
+          router.replace(`/interview/${token}/video`);
+          return;
+        }
         setJobTitle(data.job_title as string || "");
         setJobDescription(data.job_description as string || "");
-        setInterviewConfig(data.interview_config as Record<string, unknown> || {});
-        setTotal((data.interview_config as Record<string, number>)?.num_questions || 10);
+        setInterviewConfig(config);
+        setTotal((config.num_questions as number) || 10);
         setPhase("consent");
       } catch {
         setError("Interview not found or link expired.");
@@ -58,7 +81,7 @@ export default function CandidateInterviewPage() {
       }
     }
     load();
-  }, [token]);
+  }, [token, router]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -89,6 +112,7 @@ export default function CandidateInterviewPage() {
   }
 
   const connectWebSocket = useCallback(() => {
+    intentionalCloseRef.current = false;
     const wsUrl =
       (process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8001") +
       `/ws/interview/${token}`;
@@ -96,6 +120,11 @@ export default function CandidateInterviewPage() {
     wsRef.current = ws;
 
     timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
+
+    ws.onopen = () => {
+      setReconnecting(false);
+      reconnectAttemptsRef.current = 0;
+    };
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
@@ -111,10 +140,14 @@ export default function CandidateInterviewPage() {
         if (data.content) {
           setMessages((m) => [...m, { role: "interviewer", content: data.content }]);
         }
+        intentionalCloseRef.current = true;
+        interviewActiveRef.current = false;
         setPhase("completed");
         ws.close();
         if (timerRef.current) clearInterval(timerRef.current);
       } else if (data.type === "error") {
+        intentionalCloseRef.current = true;
+        interviewActiveRef.current = false;
         setError(data.content);
         setPhase("error");
         ws.close();
@@ -122,20 +155,49 @@ export default function CandidateInterviewPage() {
       }
     };
 
-    ws.onerror = () => {
-      setError("Connection error. Please refresh the page.");
-      setPhase("error");
-    };
+    ws.onerror = () => {};
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (intentionalCloseRef.current) return;
+      if (event.code === 1000) return;
+      if (!interviewActiveRef.current) return;
+
+      const maxAttempts = 3;
+      const delays = [1000, 2000, 4000];
+      if (reconnectAttemptsRef.current >= maxAttempts) {
+        interviewActiveRef.current = false;
+        setReconnectFailed(true);
+        setError("Connection lost. Please try again.");
+        setPhase("error");
+        return;
+      }
+
+      const delay = delays[reconnectAttemptsRef.current];
+      reconnectAttemptsRef.current += 1;
+      setReconnecting(true);
+      reconnectTimeoutRef.current = setTimeout(() => {
+        reconnectTimeoutRef.current = null;
+        connectWebSocket();
+      }, delay);
     };
   }, [token]);
 
   function startInterview() {
     setPhase("interview");
+    interviewActiveRef.current = true;
     connectWebSocket();
   }
+
+  useEffect(() => {
+    return () => {
+      intentionalCloseRef.current = true;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   function sendMessage(e: React.FormEvent) {
     e.preventDefault();
@@ -170,6 +232,14 @@ export default function CandidateInterviewPage() {
             Something went wrong
           </h2>
           <p className="mt-2 text-sm text-slate-400">{error}</p>
+          {reconnectFailed && (
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-6 rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+            >
+              Try Again
+            </button>
+          )}
         </div>
       </div>
     );
@@ -296,10 +366,13 @@ export default function CandidateInterviewPage() {
     );
   }
 
-  // Interview phase
   return (
     <div className="flex h-screen flex-col bg-slate-950">
-      {/* Header */}
+      {reconnecting && (
+        <div className="bg-amber-600/90 text-white text-center py-2 text-sm font-medium">
+          Reconnecting...
+        </div>
+      )}
       <header className="flex items-center justify-between border-b border-slate-800 px-6 py-3">
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center">

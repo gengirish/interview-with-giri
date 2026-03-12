@@ -13,25 +13,35 @@ import {
   Clock,
   Target,
   CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 
 export default function AnalyticsPage() {
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
   const [jobStats, setJobStats] = useState<JobAnalytics[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchAnalytics = () => {
+    setError(null);
+    setLoading(true);
+    Promise.allSettled([
+      api.getAnalyticsOverview(),
+      api.getAnalyticsPerJob(),
+    ]).then(([overviewResult, jobStatsResult]) => {
+      const overviewFulfilled = overviewResult.status === "fulfilled";
+      const jobStatsFulfilled = jobStatsResult.status === "fulfilled";
+      if (overviewFulfilled) setOverview(overviewResult.value);
+      if (jobStatsFulfilled) setJobStats(jobStatsResult.value);
+      if (!overviewFulfilled && !jobStatsFulfilled) {
+        setError("Failed to load analytics");
+      }
+    }).finally(() => setLoading(false));
+  };
 
   useEffect(() => {
-    Promise.all([api.getAnalyticsOverview(), api.getAnalyticsPerJob()])
-      .then(([o, j]) => {
-        setOverview(o);
-        setJobStats(j);
-      })
-      .catch((err: unknown) => {
-        toast.error(err instanceof Error ? err.message : "Failed to load analytics");
-      })
-      .finally(() => setLoading(false));
+    fetchAnalytics();
   }, []);
 
   if (loading) {
@@ -42,16 +52,52 @@ export default function AnalyticsPage() {
     );
   }
 
-  if (!overview) {
+  if (error) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center">
-        <BarChart3 className="mx-auto h-12 w-12 text-slate-300" />
-        <h3 className="mt-4 text-lg font-medium text-slate-900">
-          No analytics data yet
-        </h3>
-        <p className="mt-1 text-sm text-slate-500">
-          Complete some interviews to see analytics.
-        </p>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Analytics</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Interview performance metrics and insights
+          </p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-12 shadow-sm text-center">
+          <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
+          <h3 className="mt-4 text-lg font-medium text-slate-900">
+            Failed to load analytics
+          </h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Please try again.
+          </p>
+          <button
+            onClick={fetchAnalytics}
+            className="mt-6 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!overview && jobStats.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Analytics</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Interview performance metrics and insights
+          </p>
+        </div>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center">
+          <BarChart3 className="mx-auto h-12 w-12 text-slate-300" />
+          <h3 className="mt-4 text-lg font-medium text-slate-900">
+            No analytics data yet
+          </h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Complete some interviews to see analytics.
+          </p>
+        </div>
       </div>
     );
   }
@@ -71,15 +117,6 @@ export default function AnalyticsPage() {
     expired: "bg-slate-400",
   };
 
-  const maxScoreCount = Math.max(
-    ...Object.values(overview.score_distribution),
-    1,
-  );
-  const maxStatusCount = Math.max(
-    ...Object.values(overview.status_breakdown),
-    1,
-  );
-
   return (
     <div className="space-y-6">
       <div>
@@ -89,6 +126,17 @@ export default function AnalyticsPage() {
         </p>
       </div>
 
+      {overview && (() => {
+        const maxScoreCount = Math.max(
+          ...Object.values(overview.score_distribution),
+          1,
+        );
+        const maxStatusCount = Math.max(
+          ...Object.values(overview.status_breakdown),
+          1,
+        );
+        return (
+          <>
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {[
@@ -239,6 +287,9 @@ export default function AnalyticsPage() {
           </div>
         </div>
       </div>
+          </>
+        );
+      })()}
 
       {/* Per-Job Analytics */}
       {jobStats.length > 0 && (

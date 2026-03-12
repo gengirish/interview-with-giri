@@ -2,6 +2,7 @@
 
 import asyncio
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 import httpx
 import structlog
@@ -9,6 +10,8 @@ import structlog
 from interviewbot.config import get_settings
 
 logger = structlog.get_logger()
+
+RAPIDAPI_HOST_DEFAULT = "judge0-ce.p.rapidapi.com"
 
 LANGUAGE_IDS = {
     "python": 71,  # Python 3.8
@@ -35,6 +38,11 @@ class ExecutionResult:
     exit_code: int | None
 
 
+def _rapidapi_host_from_url(api_url: str) -> str:
+    parsed = urlparse(api_url)
+    return parsed.netloc or RAPIDAPI_HOST_DEFAULT
+
+
 async def execute_code(
     source_code: str,
     language: str,
@@ -43,6 +51,16 @@ async def execute_code(
 ) -> ExecutionResult:
     """Execute code using Judge0 API and return the result."""
     settings = get_settings()
+    if not settings.judge0_rapidapi_key:
+        return ExecutionResult(
+            stdout="",
+            stderr="Code execution is not configured: JUDGE0_RAPIDAPI_KEY is required",
+            compile_output="",
+            status="error",
+            time=None,
+            memory=None,
+            exit_code=None,
+        )
     lang_id = LANGUAGE_IDS.get(language.lower())
 
     if not lang_id:
@@ -58,7 +76,12 @@ async def execute_code(
         )
 
     submission_url = f"{settings.judge0_api_url}/submissions"
-    headers = {"Content-Type": "application/json"}
+    rapidapi_host = _rapidapi_host_from_url(settings.judge0_api_url)
+    headers = {
+        "Content-Type": "application/json",
+        "x-rapidapi-key": settings.judge0_rapidapi_key,
+        "x-rapidapi-host": rapidapi_host,
+    }
 
     payload = {
         "source_code": source_code,
@@ -84,6 +107,7 @@ async def execute_code(
                 result_response = await client.get(
                     f"{submission_url}/{token}",
                     params={"base64_encoded": "false"},
+                    headers=headers,
                 )
                 result_response.raise_for_status()
                 result = result_response.json()

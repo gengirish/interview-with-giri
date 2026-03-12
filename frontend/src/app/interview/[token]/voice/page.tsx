@@ -37,6 +37,12 @@ export default function VoiceInterviewPage() {
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intentionalCloseRef = useRef(false);
+  const interviewActiveRef = useRef(false);
+  const [reconnecting, setReconnecting] = useState(false);
+  const [reconnectFailed, setReconnectFailed] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -76,6 +82,7 @@ export default function VoiceInterviewPage() {
   }
 
   const connectWebSocket = useCallback(() => {
+    intentionalCloseRef.current = false;
     const wsUrl =
       (process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8001") +
       `/ws/voice-interview/${token}`;
@@ -83,6 +90,11 @@ export default function VoiceInterviewPage() {
     wsRef.current = ws;
 
     timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
+
+    ws.onopen = () => {
+      setReconnecting(false);
+      reconnectAttemptsRef.current = 0;
+    };
 
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
@@ -119,22 +131,46 @@ export default function VoiceInterviewPage() {
           ]);
         }
         if (data.audio) playAudio(data.audio);
+        intentionalCloseRef.current = true;
+        interviewActiveRef.current = false;
         setPhase("completed");
         ws.close();
         if (timerRef.current) clearInterval(timerRef.current);
       } else if (data.type === "error") {
+        intentionalCloseRef.current = true;
+        interviewActiveRef.current = false;
         setError(data.content);
         setPhase("error");
+        ws.close();
+        if (timerRef.current) clearInterval(timerRef.current);
       }
     };
 
-    ws.onerror = () => {
-      setError("Connection error. Please refresh.");
-      setPhase("error");
-    };
+    ws.onerror = () => {};
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (intentionalCloseRef.current) return;
+      if (event.code === 1000) return;
+      if (!interviewActiveRef.current) return;
+
+      const maxAttempts = 3;
+      const delays = [1000, 2000, 4000];
+      if (reconnectAttemptsRef.current >= maxAttempts) {
+        interviewActiveRef.current = false;
+        setReconnectFailed(true);
+        setError("Connection lost. Please try again.");
+        setPhase("error");
+        return;
+      }
+
+      const delay = delays[reconnectAttemptsRef.current];
+      reconnectAttemptsRef.current += 1;
+      setReconnecting(true);
+      reconnectTimeoutRef.current = setTimeout(() => {
+        reconnectTimeoutRef.current = null;
+        connectWebSocket();
+      }, delay);
     };
   }, [token]);
 
@@ -155,8 +191,19 @@ export default function VoiceInterviewPage() {
 
   function startInterview() {
     setPhase("interview");
+    interviewActiveRef.current = true;
     connectWebSocket();
   }
+
+  useEffect(() => {
+    return () => {
+      intentionalCloseRef.current = true;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   async function toggleRecording() {
     if (isRecording) {
@@ -226,6 +273,14 @@ export default function VoiceInterviewPage() {
           <AlertTriangle className="mx-auto h-12 w-12 text-red-400" />
           <h2 className="mt-4 text-xl font-bold text-white">Error</h2>
           <p className="mt-2 text-sm text-slate-400">{error}</p>
+          {reconnectFailed && (
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-6 rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+            >
+              Retry
+            </button>
+          )}
         </div>
       </div>
     );
@@ -321,7 +376,15 @@ export default function VoiceInterviewPage() {
     );
 
   return (
-    <div className="flex h-screen flex-col bg-slate-950">
+    <div className="flex h-screen flex-col bg-slate-950 relative">
+      {reconnecting && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/90">
+          <div className="rounded-xl bg-slate-800 px-8 py-6 text-center">
+            <Loader2 className="mx-auto h-10 w-10 animate-spin text-indigo-400" />
+            <p className="mt-3 text-sm font-medium text-white">Reconnecting...</p>
+          </div>
+        </div>
+      )}
       <header className="flex items-center justify-between border-b border-slate-800 px-6 py-3">
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center">

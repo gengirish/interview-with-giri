@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
@@ -19,13 +19,16 @@ from interviewbot.services.behavior_analytics import (
     record_batch_events,
     record_behavior_event,
 )
+from interviewbot.routers.auth import limiter
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/proctoring", tags=["proctoring"])
 
 
 @router.post("/events/{session_token}")
+@limiter.limit("60/minute")
 async def submit_behavior_event(
+    request: Request,
     session_token: str,
     event: BehaviorEventCreate,
     db: AsyncSession = Depends(get_db),
@@ -37,7 +40,9 @@ async def submit_behavior_event(
 
 
 @router.post("/voice-timing/{session_token}")
+@limiter.limit("60/minute")
 async def submit_voice_timing(
+    request: Request,
     session_token: str,
     timings: list[float] = Body(..., description="List of response latency values in ms"),
     db: AsyncSession = Depends(get_db),
@@ -53,7 +58,9 @@ async def submit_voice_timing(
 
 
 @router.post("/events/{session_token}/batch")
+@limiter.limit("60/minute")
 async def submit_behavior_events_batch(
+    request: Request,
     session_token: str,
     events: list[BehaviorEventCreate],
     db: AsyncSession = Depends(get_db),

@@ -39,6 +39,7 @@ dependencies = [
     "websockets>=13.0",
     "livekit-api>=0.7",
     "slowapi>=0.1.9",
+    "sentry-sdk[fastapi]>=2.0",
 ]
 
 [dependency-groups]

@@ -6,9 +6,32 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Interview Bot - AI-Powered Interview Platform",
+  title: {
+    default: "InterviewBot - AI-Powered Interview Platform",
+    template: "%s | InterviewBot",
+  },
   description:
-    "Conduct automated AI interviews for any job role. Text, voice, and video interviews with intelligent scoring and analytics.",
+    "Streamline your hiring with AI-powered interviews. Automated screening, real-time scoring, and comprehensive candidate reports.",
+  keywords: ["AI interview", "hiring platform", "automated screening", "interview bot", "recruitment"],
+  authors: [{ name: "InterviewBot" }],
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: "https://hire-with-giri.vercel.app",
+    siteName: "InterviewBot",
+    title: "InterviewBot - AI-Powered Interview Platform",
+    description:
+      "Streamline your hiring with AI-powered interviews. Automated screening, real-time scoring, and comprehensive candidate reports.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "InterviewBot - AI-Powered Interview Platform",
+    description: "Streamline your hiring with AI-powered interviews.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({

@@ -54,8 +54,9 @@ services:
       context: ../frontend
       target: runner
       args:
-        NEXT_PUBLIC_API_URL: ${APP_URL:-http://localhost}:8001
-        NEXT_PUBLIC_WS_URL: ${APP_URL:-ws://localhost}:8001
+        NEXT_PUBLIC_API_URL: ${BACKEND_URL:-http://localhost:8001}
+        NEXT_PUBLIC_WS_URL: ${BACKEND_WS_URL:-ws://localhost:8001}
+        NEXT_PUBLIC_LIVEKIT_URL: ${LIVEKIT_URL:-ws://localhost:7880}
     ports:
       - "3000:3000"
     depends_on:
@@ -81,7 +82,7 @@ services:
     volumes:
       - certbot_data:/etc/letsencrypt
       - certbot_www:/var/www/certbot
-    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew; sleep 12h; done"
+    entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew; sleep 12h; done"]
 
 volumes:
   postgres_data:

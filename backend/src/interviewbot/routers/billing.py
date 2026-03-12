@@ -95,7 +95,9 @@ async def create_checkout(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid plan")
 
     org_result = await db.execute(select(Organization).where(Organization.id == org_id))
-    org_result.scalar_one_or_none()
+    org = org_result.scalar_one_or_none()
+    if org is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Organization not found")
 
     try:
         checkout_session = stripe.checkout.Session.create(

@@ -55,12 +55,17 @@ async def update_webhook_config(
 
     settings = org.settings or {}
     webhooks = settings.get("webhooks", [])
-    webhooks.append(config.model_dump())
+    config_dict = config.model_dump()
+    existing_idx = next((i for i, wh in enumerate(webhooks) if wh.get("url") == config.url), None)
+    if existing_idx is not None:
+        webhooks[existing_idx] = config_dict
+    else:
+        webhooks.append(config_dict)
     settings["webhooks"] = webhooks
     org.settings = settings
     await db.commit()
 
-    return {"status": "added", "webhooks": webhooks}
+    return {"status": "updated" if existing_idx is not None else "added", "webhooks": webhooks}
 
 
 async def dispatch_webhook(org_id: str, event_type: str, payload: dict, db: AsyncSession) -> None:

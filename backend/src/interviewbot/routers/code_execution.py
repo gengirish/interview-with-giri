@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from interviewbot.dependencies import get_db
 from interviewbot.models.tables import InterviewSession
+from interviewbot.routers.auth import limiter
 from interviewbot.services.code_executor import execute_code
 
 router = APIRouter(prefix="/code", tags=["Code Execution"])
@@ -42,7 +43,9 @@ async def _validate_interview_token(token: str, db: AsyncSession) -> None:
 
 
 @router.post("/execute", response_model=CodeResult)
+@limiter.limit("10/minute")
 async def run_code(
+    request: Request,
     submission: CodeSubmission,
     db: AsyncSession = Depends(get_db),
 ) -> CodeResult:

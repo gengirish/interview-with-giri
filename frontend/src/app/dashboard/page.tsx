@@ -10,19 +10,32 @@ import {
   Loader2,
   CalendarDays,
   Target,
+  AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchStats = () => {
+    setError(null);
+    setLoading(true);
     api
       .getDashboardStats()
-      .then(setStats)
-      .catch(() => {})
+      .then((data) => {
+        setStats(data);
+        setError(null);
+      })
+      .catch(() => {
+        setError("Failed to load dashboard data");
+      })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchStats();
   }, []);
 
   const cards = stats
@@ -79,6 +92,22 @@ export default function DashboardPage() {
       {loading ? (
         <div className="flex items-center justify-center h-32">
           <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+        </div>
+      ) : error ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-12 shadow-sm text-center">
+          <AlertTriangle className="mx-auto h-12 w-12 text-amber-500" />
+          <h3 className="mt-4 text-lg font-medium text-slate-900">
+            Failed to load dashboard data
+          </h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Please try again.
+          </p>
+          <button
+            onClick={fetchStats}
+            className="mt-6 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+          >
+            Retry
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

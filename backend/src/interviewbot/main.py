@@ -33,6 +33,15 @@ def create_app() -> FastAPI:
     settings = get_settings()
     setup_logging(settings.app_env)
 
+    if settings.sentry_dsn:
+        import sentry_sdk
+
+        sentry_sdk.init(
+            dsn=settings.sentry_dsn,
+            traces_sample_rate=0.1,
+            environment=settings.app_env,
+        )
+
     app = FastAPI(
         title="Interview Bot API",
         description="AI-powered Interview as a Service",
@@ -57,6 +66,10 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        if settings.sentry_dsn:
+            import sentry_sdk
+
+            sentry_sdk.capture_exception(exc)
         logger = structlog.get_logger()
         logger.error(
             "unhandled_exception",

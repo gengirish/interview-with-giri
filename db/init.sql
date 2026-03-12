@@ -1,3 +1,5 @@
+-- Alembic is the authoritative schema source. This file is for Docker dev init only.
+
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE IF NOT EXISTS organization (
@@ -74,6 +76,14 @@ CREATE TABLE IF NOT EXISTS interview_message (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS behavior_event (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id UUID NOT NULL REFERENCES interview_session(id) ON DELETE CASCADE,
+    event_type VARCHAR(50) NOT NULL,
+    timestamp TIMESTAMPTZ DEFAULT NOW(),
+    data JSONB
+);
+
 CREATE TABLE IF NOT EXISTS candidate_report (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     session_id UUID UNIQUE NOT NULL REFERENCES interview_session(id) ON DELETE CASCADE,
@@ -84,6 +94,7 @@ CREATE TABLE IF NOT EXISTS candidate_report (
     concerns JSONB DEFAULT '[]',
     recommendation VARCHAR(50),
     confidence_score NUMERIC(3, 2),
+    extended_data JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -96,5 +107,6 @@ CREATE INDEX IF NOT EXISTS idx_session_org ON interview_session(org_id);
 CREATE INDEX IF NOT EXISTS idx_session_token ON interview_session(token);
 CREATE INDEX IF NOT EXISTS idx_session_status ON interview_session(status);
 CREATE INDEX IF NOT EXISTS idx_message_session ON interview_message(session_id);
+CREATE INDEX IF NOT EXISTS ix_behavior_event_session_id ON behavior_event(session_id);
 CREATE INDEX IF NOT EXISTS idx_report_session ON candidate_report(session_id);
 CREATE INDEX IF NOT EXISTS idx_subscription_org ON subscription(org_id);

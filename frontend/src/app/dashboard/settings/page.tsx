@@ -28,6 +28,31 @@ export default function SettingsPage() {
     apiKey: string;
     subdomain: string;
   }>({ platform: "", apiKey: "", subdomain: "" });
+  const [notificationPrefs, setNotificationPrefs] = useState<{
+    interview_completed: boolean;
+    report_generated: boolean;
+    weekly_digest: boolean;
+  }>({
+    interview_completed: true,
+    report_generated: true,
+    weekly_digest: true,
+  });
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("notification_preferences");
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<{
+          interview_completed: boolean;
+          report_generated: boolean;
+          weekly_digest: boolean;
+        }>;
+        setNotificationPrefs((p) => ({ ...p, ...parsed }));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     api
@@ -349,20 +374,23 @@ export default function SettingsPage() {
           <div className="mt-4 space-y-4">
             {[
               {
+                key: "interview_completed" as const,
                 label: "Interview completed",
                 desc: "Get notified when a candidate finishes an interview",
               },
               {
+                key: "report_generated" as const,
                 label: "Report generated",
                 desc: "Get notified when AI scoring is complete",
               },
               {
+                key: "weekly_digest" as const,
                 label: "Weekly digest",
                 desc: "Receive a weekly summary of all interviews",
               },
             ].map((item) => (
               <label
-                key={item.label}
+                key={item.key}
                 className="flex items-center justify-between rounded-lg border border-slate-200 p-4 hover:bg-slate-50 cursor-pointer"
               >
                 <div>
@@ -373,7 +401,22 @@ export default function SettingsPage() {
                 </div>
                 <input
                   type="checkbox"
-                  defaultChecked
+                  checked={notificationPrefs[item.key]}
+                  onChange={() => {
+                    const next = {
+                      ...notificationPrefs,
+                      [item.key]: !notificationPrefs[item.key],
+                    };
+                    setNotificationPrefs(next);
+                    try {
+                      localStorage.setItem(
+                        "notification_preferences",
+                        JSON.stringify(next)
+                      );
+                    } catch {
+                      /* ignore */
+                    }
+                  }}
                   className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                 />
               </label>

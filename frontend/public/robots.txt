@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard/
+Disallow: /interview/
+Disallow: /api/
+
+Sitemap: https://hire-with-giri.vercel.app/sitemap.xml

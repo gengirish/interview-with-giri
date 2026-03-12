@@ -48,6 +48,7 @@ class Settings(BaseSettings):
 
     # Code Execution
     judge0_api_url: str = "https://judge0-ce.p.rapidapi.com"
+    judge0_rapidapi_key: str = ""
 
     # Storage
     s3_bucket_name: str = "interviewbot-media"
@@ -63,6 +64,8 @@ class Settings(BaseSettings):
 
     # App
     app_url: str = "http://localhost:3000"
+
+    sentry_dsn: str = ""
 
     # CORS (comma-separated string; split via cors_origins_list property)
     cors_origins: str = "http://localhost:3000"
