@@ -131,6 +131,6 @@ async def dispatch_webhook(org_id: str, event_type: str, payload: dict, db: Asyn
                         "X-Webhook-Signature": signature,
                     },
                 )
-            logger.info("webhook_dispatched", url=url, event=event_type)
+            logger.info("webhook_dispatched", url=url, event_type=event_type)
         except (httpx.HTTPError, httpx.TimeoutException, OSError) as e:
-            logger.warning("webhook_failed", url=url, event=event_type, error=str(e))
+            logger.warning("webhook_failed", url=url, event_type=event_type, error=str(e))

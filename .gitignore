@@ -43,6 +43,7 @@ test-results/
 
 # Logs
 *.log
+logs_*/
 
 # Alembic
 alembic/versions/*.pyc

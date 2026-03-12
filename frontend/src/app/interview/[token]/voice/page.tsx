@@ -43,7 +43,7 @@ export default function VoiceInterviewPage() {
   const intentionalCloseRef = useRef(false);
   const interviewActiveRef = useRef(false);
   const [reconnecting, setReconnecting] = useState(false);
-  const [reconnectFailed, setReconnectFailed] = useState(false);
+  const [, setReconnectFailed] = useState(false);
 
   useEffect(() => {
     async function load() {

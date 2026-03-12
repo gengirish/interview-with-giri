@@ -112,4 +112,4 @@ async def test_score_interview_success(db):
     assert result.session_id == session.id
     assert result.ai_summary == "Strong candidate."
     assert result.recommendation == "hire"
-    assert result.confidence_score == 0.85
+    assert float(result.confidence_score) == pytest.approx(0.85)

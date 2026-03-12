@@ -29,14 +29,12 @@ async def test_execute_code_unsupported_language():
 
 @pytest.mark.asyncio
 async def test_execute_code_success():
-    post_resp = AsyncMock()
-    post_resp.status_code = 200
-    post_resp.json = lambda: {"token": "t1"}
-    post_resp.raise_for_status = AsyncMock()
+    post_resp = MagicMock()
+    post_resp.json.return_value = {"token": "t1"}
+    post_resp.raise_for_status = MagicMock()
 
-    get_resp = AsyncMock()
-    get_resp.status_code = 200
-    get_resp.json = lambda: {
+    get_resp = MagicMock()
+    get_resp.json.return_value = {
         "status": {"id": 3, "description": "Accepted"},
         "stdout": "hello",
         "stderr": "",
@@ -45,24 +43,19 @@ async def test_execute_code_success():
         "memory": 1000,
         "exit_code": 0,
     }
-    get_resp.raise_for_status = AsyncMock()
+    get_resp.raise_for_status = MagicMock()
 
     mock_client = AsyncMock()
-    mock_client.post = AsyncMock(return_value=post_resp)
-    mock_client.get = AsyncMock(return_value=get_resp)
-
-    mock_aclient = MagicMock()
-    mock_aclient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_aclient.return_value.__aexit__ = AsyncMock(return_value=None)
+    mock_client.post.return_value = post_resp
+    mock_client.get.return_value = get_resp
 
     with (
         patch("interviewbot.services.code_executor.get_settings") as mock_settings,
         patch("interviewbot.services.code_executor.asyncio.sleep", new_callable=AsyncMock),
-        patch(
-            "interviewbot.services.code_executor.httpx.AsyncClient",
-            new=mock_aclient,
-        ),
+        patch("interviewbot.services.code_executor.httpx.AsyncClient") as mock_cls,
     ):
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
         mock_settings.return_value.judge0_rapidapi_key = "test-key"
         mock_settings.return_value.judge0_api_url = "https://judge0.example.com"
         result = await execute_code("print('hello')", "python")

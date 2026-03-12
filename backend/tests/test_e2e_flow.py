@@ -223,7 +223,7 @@ async def test_report_generation_and_export(client, db):
         report = CandidateReport(
             session_id=sess.id,
             ai_summary="Strong candidate.",
-            recommendation="Hire",
+            recommendation="hire",
             strengths=["Python"],
             concerns=[],
             confidence_score=0.85,

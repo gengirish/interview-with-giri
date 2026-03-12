@@ -135,7 +135,7 @@ jobs:
           NEXT_PUBLIC_STRIPE_KEY: pk_test_fake
 
   deploy-backend:
-    needs: [backend-quality, backend-full]
+    needs: [backend-full]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:

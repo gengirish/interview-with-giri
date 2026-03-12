@@ -2,7 +2,6 @@
 
 from unittest.mock import AsyncMock, patch
 
-import httpx
 import pytest
 
 from interviewbot.models.tables import Organization
@@ -10,7 +9,7 @@ from interviewbot.routers.webhooks import dispatch_webhook
 
 
 @pytest.mark.asyncio
-async def test_dispatch_webhook_no_webhooks_configured(db):
+async def test_dispatch_webhook_no_webhooks_configured(db: object) -> None:
     org = Organization(name="No Webhooks Org", settings={})
     db.add(org)
     await db.commit()
@@ -23,13 +22,11 @@ async def test_dispatch_webhook_no_webhooks_configured(db):
             {"session_id": "s1"},
             db,
         )
-        mock_client_class.return_value.__aenter__.assert_called_once()
-        post_call = mock_client_class.return_value.__aenter__.return_value.post
-        post_call.assert_not_called()
+        mock_client_class.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_dispatch_webhook_with_webhook_configured(db):
+async def test_dispatch_webhook_with_webhook_configured(db: object) -> None:
     org = Organization(
         name="Webhook Org",
         settings={
@@ -47,12 +44,12 @@ async def test_dispatch_webhook_with_webhook_configured(db):
     await db.refresh(org)
 
     post_mock = AsyncMock()
+    mock_client = AsyncMock()
+    mock_client.post = post_mock
+
     with patch("interviewbot.routers.webhooks.httpx.AsyncClient") as mock_client_class:
-        mock_client = AsyncMock()
-        mock_client.post = post_mock
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client_class.return_value = mock_client
+        mock_client_class.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
         await dispatch_webhook(
             str(org.id),
@@ -73,7 +70,9 @@ async def test_dispatch_webhook_with_webhook_configured(db):
 
 
 @pytest.mark.asyncio
-async def test_dispatch_webhook_url_unreachable(db):
+async def test_dispatch_webhook_url_unreachable(db: object) -> None:
+    from httpx import ConnectError
+
     org = Organization(
         name="Unreachable Org",
         settings={
@@ -90,13 +89,13 @@ async def test_dispatch_webhook_url_unreachable(db):
     await db.commit()
     await db.refresh(org)
 
-    post_mock = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
+    post_mock = AsyncMock(side_effect=ConnectError("Connection refused"))
+    mock_client = AsyncMock()
+    mock_client.post = post_mock
+
     with patch("interviewbot.routers.webhooks.httpx.AsyncClient") as mock_client_class:
-        mock_client = AsyncMock()
-        mock_client.post = post_mock
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client_class.return_value = mock_client
+        mock_client_class.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client_class.return_value.__aexit__ = AsyncMock(return_value=None)
 
         await dispatch_webhook(
             str(org.id),

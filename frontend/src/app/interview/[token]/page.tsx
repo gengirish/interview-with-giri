@@ -37,7 +37,7 @@ export default function CandidateInterviewPage() {
   const [tabSwitches, setTabSwitches] = useState(0);
 
   const [reconnecting, setReconnecting] = useState(false);
-  const [reconnectFailed, setReconnectFailed] = useState(false);
+  const [, setReconnectFailed] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
