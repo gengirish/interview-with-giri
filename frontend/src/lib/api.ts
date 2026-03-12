@@ -268,6 +268,45 @@ export const api = {
     }),
   getReport: (sessionId: string) =>
     request<CandidateReport>(`/api/v1/reports/${sessionId}`),
+  exportReportJSON: (sessionId: string) =>
+    request<Record<string, unknown>>(
+      `/api/v1/reports/${sessionId}/export/json`,
+    ),
+  exportReportCSV: (sessionId: string) =>
+    `/api/v1/reports/${sessionId}/export/csv`,
+  exportReportCSVBlob: async (sessionId: string): Promise<Blob> => {
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const res = await fetch(`${API_BASE}/api/v1/reports/${sessionId}/export/csv`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError(
+        res.status,
+        (body as { detail?: string }).detail || "Failed to export CSV",
+      );
+    }
+    return res.blob();
+  },
+
+  // ATS Integration
+  getATSConfigs: () =>
+    request<{ platform: string; enabled: boolean }[]>("/api/v1/ats/config"),
+  saveATSConfig: (config: {
+    platform: string;
+    api_key: string;
+    enabled?: boolean;
+    subdomain?: string;
+  }) =>
+    request<{ status: string }>("/api/v1/ats/config", {
+      method: "POST",
+      body: JSON.stringify(config),
+    }),
+  deleteATSConfig: (platform: string) =>
+    request<{ status: string }>(`/api/v1/ats/config/${platform}`, {
+      method: "DELETE",
+    }),
 
   // Analytics
   getAnalyticsOverview: () =>

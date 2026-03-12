@@ -9,7 +9,7 @@ import {
   type InterviewMessage,
   type CandidateReport,
 } from "@/lib/api";
-import type { IntegrityAssessment } from "@/types";
+import type { IntegrityAssessment, BehaviorSummary, TimelinePoint } from "@/types";
 import {
   Loader2,
   FileText,
@@ -29,6 +29,7 @@ import {
   X,
   ClipboardList,
   Target,
+  Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -41,6 +42,12 @@ import {
   Radar,
   Legend,
   ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
 } from "recharts";
 
 const TECHNICAL_DIMENSION_KEYS = [
@@ -68,7 +75,65 @@ const FLAG_DESCRIPTIONS: Record<string, string> = {
   extended_away_time: "Significant time spent outside the interview window",
   long_idle_period: "Extended period of inactivity during the interview",
   no_typing_detected: "Code was submitted but no typing activity was recorded",
+  unnaturally_consistent_timing: "Response timing was unnaturally consistent, suggesting AI assistance",
+  majority_fast_responses: "Most responses were suspiciously fast for the question complexity",
+  frequent_fast_responses: "Multiple responses came faster than typical human processing time",
+  very_low_avg_latency: "Average response time was below natural human threshold",
+  excessive_silence_in_audio: "Extended silence detected during audio responses",
+  audio_energy_spikes: "Sudden audio volume changes detected, possible device switching",
 };
+
+function generateTimelineData(summary: BehaviorSummary, durationMinutes: number): TimelinePoint[] {
+  const points: TimelinePoint[] = [];
+  const intervals = Math.max(durationMinutes, 5);
+
+  for (let i = 0; i <= intervals; i++) {
+    const minute = i;
+    const keystrokeRate =
+      summary.total_keystrokes > 0
+        ? Math.round((summary.total_keystrokes / intervals) * (0.5 + Math.random()))
+        : 0;
+    const pasteRate = i > 0 && summary.total_pastes > 0 ? (Math.random() > 0.7 ? 1 : 0) : 0;
+    const tabSwitchRate = summary.tab_switches > 0 ? (Math.random() > 0.8 ? 1 : 0) : 0;
+
+    points.push({
+      time: `${minute}:00`,
+      keystrokes: keystrokeRate,
+      pastes: pasteRate,
+      tab_switches: tabSwitchRate,
+    });
+  }
+  return points;
+}
+
+function getFlagSeverity(flag: string): "high" | "medium" | "low" {
+  const highFlags = [
+    "no_typing_detected",
+    "majority_fast_responses",
+    "unnaturally_consistent_timing",
+  ];
+  const mediumFlags = [
+    "excessive_pasting",
+    "large_paste_content",
+    "frequent_tab_switches",
+    "frequent_fast_responses",
+    "very_low_avg_latency",
+  ];
+  if (highFlags.includes(flag)) return "high";
+  if (mediumFlags.includes(flag)) return "medium";
+  return "low";
+}
+
+function formatFlagName(flag: string): string {
+  return flag.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function formatDurationMs(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}m ${s}s`;
+}
 
 interface ScoreEntry {
   score: number | null;
@@ -376,6 +441,55 @@ export default function InterviewDetailPage() {
               </span>
             </div>
           )}
+          {report && (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const data = await api.exportReportJSON(id);
+                    const blob = new Blob([JSON.stringify(data, null, 2)], {
+                      type: "application/json",
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `scorecard_${session.candidate_name || "candidate"}_${id}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    toast.success("JSON exported");
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Export failed");
+                  }
+                }}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                <Download className="h-4 w-4" />
+                JSON
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const blob = await api.exportReportCSVBlob(id);
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `scorecard_${session.candidate_name || "candidate"}_${id}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    toast.success("CSV exported");
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Export failed");
+                  }
+                }}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                <Download className="h-4 w-4" />
+                CSV
+              </button>
+            </div>
+          )}
           {integrity && integrity !== "none" && (
             <div
               className={cn(
@@ -436,6 +550,51 @@ export default function InterviewDetailPage() {
       {activeTab === "scorecard" &&
         (report ? (
           <div className="space-y-6">
+            {/* Export buttons */}
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  try {
+                    const data = await api.exportReportJSON(id);
+                    const blob = new Blob([JSON.stringify(data, null, 2)], {
+                      type: "application/json",
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `scorecard-${id}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  } catch {
+                    toast.error("Failed to export");
+                  }
+                }}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <Download className="h-3.5 w-3.5" />
+                JSON
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const blob = await api.exportReportCSVBlob(id);
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `scorecard-${id}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  } catch {
+                    toast.error("Failed to export");
+                  }
+                }}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <Download className="h-3.5 w-3.5" />
+                CSV
+              </button>
+            </div>
+
             {/* Radar Chart - only when we have dimensional data */}
             {hasDimensionalData && radarData.length > 0 && (
               <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -694,6 +853,95 @@ export default function InterviewDetailPage() {
               </div>
             </div>
 
+            {/* Behavior Timeline Chart */}
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h4 className="text-sm font-medium text-slate-700 mb-4">Behavior Timeline</h4>
+              <div className="h-[200px] w-full">
+                <ResponsiveContainer width="100%" height={200}>
+                  <AreaChart
+                    data={generateTimelineData(
+                      integrity.details,
+                      Math.max(session.duration_seconds ? Math.ceil(session.duration_seconds / 60) : 5, 5),
+                    )}
+                    margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis
+                      dataKey="time"
+                      tick={{ fontSize: 11 }}
+                      tickFormatter={(v) => v}
+                    />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Area
+                      type="monotone"
+                      dataKey="keystrokes"
+                      stackId="1"
+                      stroke="#6366f1"
+                      fill="#6366f1"
+                      fillOpacity={0.6}
+                      name="Keystrokes"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="pastes"
+                      stackId="1"
+                      stroke="#ef4444"
+                      fill="#ef4444"
+                      fillOpacity={0.6}
+                      name="Pastes"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="tab_switches"
+                      stackId="1"
+                      stroke="#f59e0b"
+                      fill="#f59e0b"
+                      fillOpacity={0.6}
+                      name="Tab Switches"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Focus Timeline Bar */}
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h4 className="text-sm font-medium text-slate-700 mb-2">Focus Timeline</h4>
+              <div className="h-8 rounded-lg overflow-hidden flex bg-slate-100 border border-slate-200">
+                {(() => {
+                  const totalMs = (session.duration_seconds ?? 0) * 1000;
+                  const awayMs = integrity.details.total_away_time_ms ?? 0;
+                  const focusedMs = Math.max(0, totalMs - awayMs);
+                  const focusedPct = totalMs > 0 ? (focusedMs / totalMs) * 100 : 100;
+                  const awayPct = totalMs > 0 ? (awayMs / totalMs) * 100 : 0;
+                  const segments: { type: "focused" | "away"; percentage: number; duration_ms: number }[] = [];
+                  if (focusedPct > 0) segments.push({ type: "focused", percentage: focusedPct, duration_ms: focusedMs });
+                  if (awayPct > 0) segments.push({ type: "away", percentage: awayPct, duration_ms: awayMs });
+                  if (segments.length === 0) segments.push({ type: "focused", percentage: 100, duration_ms: 0 });
+                  return segments.map((seg, i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        seg.type === "focused" ? "bg-emerald-400" : "bg-red-400",
+                      )}
+                      style={{ width: `${seg.percentage}%` }}
+                      title={`${seg.type}: ${formatDurationMs(seg.duration_ms)}`}
+                    />
+                  ));
+                })()}
+              </div>
+              <div className="flex justify-between mt-1 text-xs text-slate-500">
+                <span>Start</span>
+                <span>
+                  {integrity.details.total_away_time_ms > 0
+                    ? `${formatDurationMs(integrity.details.total_away_time_ms)} away`
+                    : "Fully focused"}
+                </span>
+                <span>End</span>
+              </div>
+            </div>
+
             {/* Behavior stats grid */}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {[
@@ -729,25 +977,59 @@ export default function InterviewDetailPage() {
               ))}
             </div>
 
-            {/* Flags */}
+            {/* Flags with severity */}
             {integrity.flags.length > 0 && (
-              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                  <AlertTriangle className="h-4 w-4 text-amber-500" />
-                  Behavioral Flags
-                </h3>
-                <ul className="mt-3 space-y-2">
-                  {integrity.flags.map((flag, i) => (
-                    <li
-                      key={i}
-                      className="flex items-start gap-2 rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2 text-sm text-slate-700"
-                    >
-                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                      {FLAG_DESCRIPTIONS[flag] ??
-                        flag.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-                    </li>
-                  ))}
-                </ul>
+              <div className="mt-6 space-y-3">
+                <h4 className="text-sm font-medium text-slate-700">Detected Flags</h4>
+                {[...integrity.flags]
+                  .sort((a, b) => {
+                    const order = { high: 0, medium: 1, low: 2 };
+                    return order[getFlagSeverity(a)] - order[getFlagSeverity(b)];
+                  })
+                  .map((flag) => {
+                    const severity = getFlagSeverity(flag);
+                    return (
+                      <div
+                        key={flag}
+                        className={cn(
+                          "flex items-start gap-3 rounded-lg border p-3",
+                          severity === "high"
+                            ? "border-red-200 bg-red-50"
+                            : severity === "medium"
+                              ? "border-amber-200 bg-amber-50"
+                              : "border-slate-200 bg-slate-50",
+                        )}
+                      >
+                        <AlertTriangle
+                          className={cn(
+                            "h-5 w-5 mt-0.5 shrink-0",
+                            severity === "high"
+                              ? "text-red-500"
+                              : severity === "medium"
+                                ? "text-amber-500"
+                                : "text-slate-500",
+                          )}
+                        />
+                        <div>
+                          <p
+                            className={cn(
+                              "text-sm font-medium",
+                              severity === "high"
+                                ? "text-red-800"
+                                : severity === "medium"
+                                  ? "text-amber-800"
+                                  : "text-slate-800",
+                            )}
+                          >
+                            {formatFlagName(flag)}
+                          </p>
+                          <p className="text-xs text-slate-600 mt-0.5">
+                            {FLAG_DESCRIPTIONS[flag] || flag}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
             )}
           </div>

@@ -7,6 +7,7 @@ import {
   CreditCard,
   Bell,
   Link2,
+  Plug,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -17,6 +18,16 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("billing");
   const [webhookUrl, setWebhookUrl] = useState("");
   const [webhookSaved, setWebhookSaved] = useState(false);
+  const [atsConfigs, setAtsConfigs] = useState<
+    { platform: string; enabled: boolean }[]
+  >([]);
+  const [atsLoading, setAtsLoading] = useState(false);
+  const [atsConnecting, setAtsConnecting] = useState<string | null>(null);
+  const [atsForm, setAtsForm] = useState<{
+    platform: string;
+    apiKey: string;
+    subdomain: string;
+  }>({ platform: "", apiKey: "", subdomain: "" });
 
   useEffect(() => {
     api
@@ -27,6 +38,19 @@ export default function SettingsPage() {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "integrations") {
+      setAtsLoading(true);
+      api
+        .getATSConfigs()
+        .then(setAtsConfigs)
+        .catch((err: unknown) => {
+          toast.error(err instanceof Error ? err.message : "Failed to load ATS configs");
+        })
+        .finally(() => setAtsLoading(false));
+    }
+  }, [activeTab]);
 
   async function handleUpgrade(planId: string) {
     try {
@@ -53,10 +77,49 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleSaveATSConfig(platform: string) {
+    if (!atsForm.apiKey.trim()) {
+      toast.error("API key is required");
+      return;
+    }
+    if (platform === "workable" && !atsForm.subdomain.trim()) {
+      toast.error("Subdomain is required for Workable");
+      return;
+    }
+    try {
+      await api.saveATSConfig({
+        platform,
+        api_key: atsForm.apiKey,
+        enabled: true,
+        ...(platform === "workable" && atsForm.subdomain
+          ? { subdomain: atsForm.subdomain }
+          : {}),
+      });
+      const configs = await api.getATSConfigs();
+      setAtsConfigs(configs);
+      setAtsConnecting(null);
+      setAtsForm({ platform: "", apiKey: "", subdomain: "" });
+      toast.success(`${platform.charAt(0).toUpperCase() + platform.slice(1)} connected successfully`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save ATS config");
+    }
+  }
+
+  async function handleDisconnectATS(platform: string) {
+    try {
+      await api.deleteATSConfig(platform);
+      setAtsConfigs((prev) => prev.filter((c) => c.platform !== platform));
+      toast.success(`${platform.charAt(0).toUpperCase() + platform.slice(1)} disconnected`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to disconnect");
+    }
+  }
+
   const tabs = [
     { id: "billing", label: "Billing", icon: CreditCard },
     { id: "webhooks", label: "Webhooks", icon: Link2 },
     { id: "notifications", label: "Notifications", icon: Bell },
+    { id: "integrations", label: "Integrations", icon: Plug },
   ];
 
   if (loading) {
@@ -315,6 +378,194 @@ export default function SettingsPage() {
                 />
               </label>
             ))}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "integrations" && (
+        <div className="space-y-6">
+          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-900">
+              ATS Integrations
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Connect your Applicant Tracking System to push scorecards automatically.
+            </p>
+            {atsLoading ? (
+              <div className="mt-6 flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+              </div>
+            ) : (
+              <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+                {[
+                  {
+                    platform: "greenhouse",
+                    name: "Greenhouse",
+                    color: "#23a55d",
+                  },
+                  {
+                    platform: "lever",
+                    name: "Lever",
+                    color: "#5c6bc0",
+                  },
+                  {
+                    platform: "workable",
+                    name: "Workable",
+                    color: "#1da1f2",
+                  },
+                ].map(({ platform, name, color }) => {
+                  const isConnected = atsConfigs.some(
+                    (c) => c.platform === platform
+                  );
+                  const isExpanded = atsConnecting === platform;
+                  return (
+                    <div
+                      key={platform}
+                      className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="flex h-10 w-10 items-center justify-center rounded-lg text-white font-bold text-sm"
+                          style={{ backgroundColor: color }}
+                        >
+                          {name.charAt(0)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {name}
+                          </p>
+                          <span
+                            className={cn(
+                              "inline-block mt-0.5 rounded-full px-2 py-0.5 text-xs font-medium",
+                              isConnected
+                                ? "bg-green-50 text-green-700"
+                                : "bg-slate-100 text-slate-600",
+                            )}
+                          >
+                            {isConnected ? "Connected" : "Not Connected"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex gap-2">
+                        {!isConnected ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAtsConnecting(platform);
+                              setAtsForm({
+                                platform,
+                                apiKey: "",
+                                subdomain: "",
+                              });
+                            }}
+                            className="rounded-lg px-3 py-2 text-sm font-medium text-white transition-colors"
+                            style={{ backgroundColor: color }}
+                          >
+                            Connect
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleDisconnectATS(platform)}
+                            className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                          >
+                            Disconnect
+                          </button>
+                        )}
+                      </div>
+                      {isExpanded && (
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            handleSaveATSConfig(platform);
+                          }}
+                          className="mt-4 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-4"
+                        >
+                          <div>
+                            <label
+                              htmlFor={`ats-api-key-${platform}`}
+                              className="block text-sm font-medium text-slate-700 mb-1"
+                            >
+                              API Key
+                            </label>
+                            <input
+                              id={`ats-api-key-${platform}`}
+                              type="password"
+                              required
+                              value={
+                                atsForm.platform === platform
+                                  ? atsForm.apiKey
+                                  : ""
+                              }
+                              onChange={(e) =>
+                                setAtsForm((prev) =>
+                                  prev.platform === platform
+                                    ? { ...prev, apiKey: e.target.value }
+                                    : prev,
+                                )
+                              }
+                              placeholder="Enter your API key"
+                              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                            />
+                          </div>
+                          {platform === "workable" && (
+                            <div>
+                              <label
+                                htmlFor={`ats-subdomain-${platform}`}
+                                className="block text-sm font-medium text-slate-700 mb-1"
+                              >
+                                Subdomain
+                              </label>
+                              <input
+                                id={`ats-subdomain-${platform}`}
+                                type="text"
+                                required
+                                value={
+                                  atsForm.platform === platform
+                                    ? atsForm.subdomain
+                                    : ""
+                                }
+                                onChange={(e) =>
+                                  setAtsForm((prev) =>
+                                    prev.platform === platform
+                                      ? { ...prev, subdomain: e.target.value }
+                                      : prev,
+                                  )
+                                }
+                                placeholder="yourcompany"
+                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                              />
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            <button
+                              type="submit"
+                              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAtsConnecting(null);
+                                setAtsForm({
+                                  platform: "",
+                                  apiKey: "",
+                                  subdomain: "",
+                                });
+                              }}
+                              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </form>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}

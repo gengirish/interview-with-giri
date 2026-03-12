@@ -4,17 +4,19 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 import structlog
 
 from interviewbot.dependencies import get_db, get_org_id, require_role
 from interviewbot.models.schemas import BehaviorEventCreate, BehaviorSummary, IntegrityAssessment
-from interviewbot.models.tables import InterviewSession
+from interviewbot.models.tables import BehaviorEvent, InterviewSession
+from interviewbot.services.audio_analysis import analyze_response_timing
 from interviewbot.services.behavior_analytics import (
     get_behavior_summary,
-    get_integrity_assessment,
+    get_composite_integrity,
     record_batch_events,
     record_behavior_event,
 )
@@ -33,6 +35,22 @@ async def submit_behavior_event(
     session = await _get_session_by_token(db, session_token)
     await record_behavior_event(db, session.id, event)
     return {"status": "recorded"}
+
+
+@router.post("/voice-timing/{session_token}")
+async def submit_voice_timing(
+    session_token: str,
+    timings: list[float] = Body(..., description="List of response latency values in ms"),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Public endpoint: record voice response timing data for anti-cheat analysis."""
+    session = await _get_session_by_token(db, session_token)
+    event = BehaviorEventCreate(
+        event_type="voice_timing",
+        data={"latencies_ms": timings},
+    )
+    await record_behavior_event(db, session.id, event)
+    return {"status": "recorded", "count": len(timings)}
 
 
 @router.post("/events/{session_token}/batch")
@@ -68,7 +86,30 @@ async def get_session_integrity(
 ) -> IntegrityAssessment:
     """Authenticated: get integrity assessment for an interview session."""
     await _verify_session_org(db, session_id, org_id)
-    return await get_integrity_assessment(db, session_id)
+
+    # Check for voice timing data
+    result = await db.execute(
+        select(BehaviorEvent).where(
+            BehaviorEvent.session_id == session_id,
+            BehaviorEvent.event_type == "voice_timing",
+        )
+    )
+    voice_events = result.scalars().all()
+
+    audio_analysis = None
+    if voice_events:
+        all_latencies = []
+        for event in voice_events:
+            latencies = (event.data or {}).get("latencies_ms", [])
+            all_latencies.extend(latencies)
+        if all_latencies:
+            timing_result = analyze_response_timing(all_latencies)
+            audio_analysis = {
+                "audio_flags": timing_result.audio_flags,
+                "speech_consistency_score": timing_result.speech_consistency_score,
+            }
+
+    return await get_composite_integrity(db, session_id, audio_analysis)
 
 
 async def _get_session_by_token(db: AsyncSession, token: str) -> InterviewSession:

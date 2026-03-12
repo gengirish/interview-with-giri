@@ -39,3 +39,10 @@ export interface IntegrityAssessment {
   summary: string;
   details: BehaviorSummary;
 }
+
+export interface TimelinePoint {
+  time: string;
+  keystrokes: number;
+  pastes: number;
+  tab_switches: number;
+}

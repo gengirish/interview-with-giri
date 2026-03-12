@@ -258,7 +258,7 @@ class UpdateUserRoleRequest(BaseModel):
 
 class BehaviorEventCreate(BaseModel):
     event_type: str = Field(
-        ..., pattern="^(keystroke|paste|tab_switch|focus_loss|code_submit|idle)$"
+        ..., pattern="^(keystroke|paste|tab_switch|focus_loss|code_submit|idle|voice_timing)$"
     )
     timestamp: datetime | None = None
     data: dict | None = None
@@ -292,3 +292,39 @@ class IntegrityAssessment(BaseModel):
     flags: list[str]
     summary: str
     details: BehaviorSummary
+
+
+# --- ATS Integration ---
+
+class ATSConfig(BaseModel):
+    platform: str = Field(..., pattern="^(greenhouse|lever|workable)$")
+    api_key: str = Field(..., min_length=1)
+    enabled: bool = True
+    # Platform-specific fields (optional, used when pushing)
+    application_id: str | None = None
+    opportunity_id: str | None = None
+    candidate_id: str | None = None
+    job_shortcode: str | None = None
+    subdomain: str | None = None
+
+
+class ATSConfigResponse(BaseModel):
+    platform: str
+    enabled: bool
+    connected: bool = True
+
+
+class ATSPushRequest(BaseModel):
+    platform: str = Field(..., pattern="^(greenhouse|lever|workable)$")
+    session_id: UUID
+    # Optional overrides for platform-specific IDs
+    application_id: str | None = None
+    opportunity_id: str | None = None
+    candidate_id: str | None = None
+    job_shortcode: str | None = None
+
+
+class ATSPushResponse(BaseModel):
+    success: bool
+    platform: str
+    error: str | None = None

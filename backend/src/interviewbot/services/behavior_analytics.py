@@ -166,3 +166,81 @@ async def get_integrity_assessment(db: AsyncSession, session_id: uuid.UUID) -> I
         summary=assessment_summary,
         details=summary,
     )
+
+
+async def get_composite_integrity(
+    db: AsyncSession,
+    session_id: uuid.UUID,
+    audio_analysis: dict | None = None,
+) -> IntegrityAssessment:
+    """Enhanced integrity assessment combining behavior + audio signals."""
+    summary = await get_behavior_summary(db, session_id)
+
+    # Start with behavioral integrity
+    score = summary.integrity_score
+    flags = list(summary.flags)
+
+    # Layer in audio analysis if available
+    if audio_analysis:
+        audio_flags = audio_analysis.get("audio_flags", [])
+        speech_score = audio_analysis.get("speech_consistency_score", 10.0)
+
+        # Weight audio signals
+        if "unnaturally_consistent_timing" in audio_flags:
+            score -= 1.5
+            flags.append("unnaturally_consistent_timing")
+        if "majority_fast_responses" in audio_flags:
+            score -= 2.0
+            flags.append("majority_fast_responses")
+        elif "frequent_fast_responses" in audio_flags:
+            score -= 1.0
+            flags.append("frequent_fast_responses")
+        if "very_low_avg_latency" in audio_flags:
+            score -= 1.0
+            flags.append("very_low_avg_latency")
+
+        silence_data = audio_analysis.get("silence_analysis", {})
+        if "excessive_silence" in silence_data.get("flags", []):
+            score -= 0.5
+            flags.append("excessive_silence_in_audio")
+        if "audio_energy_spikes" in silence_data.get("flags", []):
+            score -= 0.5
+            flags.append("audio_energy_spikes")
+
+    score = max(score, 0.0)
+
+    if score >= 8.0:
+        risk_level = "low"
+    elif score >= 5.0:
+        risk_level = "medium"
+    else:
+        risk_level = "high"
+
+    flag_descriptions = {
+        "excessive_pasting": "Candidate pasted code frequently",
+        "large_paste_content": "Large blocks of code were pasted rather than typed",
+        "frequent_tab_switches": "Candidate switched away from the interview tab multiple times",
+        "extended_away_time": "Significant time spent outside the interview window",
+        "long_idle_period": "Extended period of inactivity",
+        "no_typing_detected": "Code was submitted but no typing activity was recorded",
+        "unnaturally_consistent_timing": "Response timing was unnaturally consistent, suggesting AI assistance",
+        "majority_fast_responses": "Most responses were suspiciously fast for the question complexity",
+        "frequent_fast_responses": "Multiple responses came faster than typical human processing time",
+        "very_low_avg_latency": "Average response time was below natural human threshold",
+        "excessive_silence_in_audio": "Extended silence detected during audio responses",
+        "audio_energy_spikes": "Sudden audio volume changes detected, possible device switching",
+    }
+
+    flag_details = [flag_descriptions.get(f, f) for f in flags]
+    if not flag_details:
+        assessment = "No suspicious behavior detected. Candidate appears to have completed the interview independently."
+    else:
+        assessment = f"Detected {len(flag_details)} behavioral flag(s): {'; '.join(flag_details)}."
+
+    return IntegrityAssessment(
+        integrity_score=round(score, 1),
+        risk_level=risk_level,
+        flags=flags,
+        summary=assessment,
+        details=summary,
+    )

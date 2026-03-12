@@ -11,6 +11,7 @@ from interviewbot.config import get_settings
 from interviewbot.middleware.tenant import TenantMiddleware
 from interviewbot.routers import (
     analytics,
+    ats,
     auth,
     billing,
     code_execution,
@@ -79,6 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(billing.router, prefix="/api/v1")
     app.include_router(users.router, prefix="/api/v1")
     app.include_router(webhooks.router, prefix="/api/v1")
+    app.include_router(ats.router, prefix="/api/v1")
 
     @app.websocket("/ws/interview/{token}")
     async def websocket_interview(websocket: WebSocket, token: str) -> None:
