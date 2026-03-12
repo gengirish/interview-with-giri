@@ -18,8 +18,11 @@ node_modules/
 
 # Environment
 .env
+.env.development
 .env.local
 .env.production
+.env.test
+*.pem
 
 # Docker
 postgres_data/

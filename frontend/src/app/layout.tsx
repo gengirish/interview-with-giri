@@ -22,11 +22,20 @@ export const metadata: Metadata = {
     title: "InterviewBot - AI-Powered Interview Platform",
     description:
       "Streamline your hiring with AI-powered interviews. Automated screening, real-time scoring, and comprehensive candidate reports.",
+    images: [
+      {
+        url: "/og-image.svg",
+        width: 1200,
+        height: 630,
+        alt: "Interview with Giri - AI Interview Platform",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "InterviewBot - AI-Powered Interview Platform",
     description: "Streamline your hiring with AI-powered interviews.",
+    images: ["/og-image.svg"],
   },
   robots: {
     index: true,

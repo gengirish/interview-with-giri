@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { api, type SubscriptionInfo } from "@/lib/api";
 import {
   Loader2,
@@ -28,6 +29,7 @@ export default function SettingsPage() {
     apiKey: string;
     subdomain: string;
   }>({ platform: "", apiKey: "", subdomain: "" });
+  const [atsDisconnectPlatform, setAtsDisconnectPlatform] = useState<string | null>(null);
   const [notificationPrefs, setNotificationPrefs] = useState<{
     interview_completed: boolean;
     report_generated: boolean;
@@ -137,6 +139,8 @@ export default function SettingsPage() {
       toast.success(`${platform.charAt(0).toUpperCase() + platform.slice(1)} disconnected`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to disconnect");
+    } finally {
+      setAtsDisconnectPlatform(null);
     }
   }
 
@@ -164,10 +168,12 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
+      <div className="flex gap-1 rounded-lg bg-slate-100 p-1" role="tablist">
         {tabs.map((tab) => (
           <button
             key={tab.id}
+            role="tab"
+            aria-selected={activeTab === tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
               "flex-1 flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors",
@@ -509,7 +515,7 @@ export default function SettingsPage() {
                         ) : (
                           <button
                             type="button"
-                            onClick={() => handleDisconnectATS(platform)}
+                            onClick={() => setAtsDisconnectPlatform(platform)}
                             className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
                           >
                             Disconnect
@@ -612,6 +618,16 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={atsDisconnectPlatform !== null}
+        onConfirm={() => atsDisconnectPlatform && handleDisconnectATS(atsDisconnectPlatform)}
+        onCancel={() => setAtsDisconnectPlatform(null)}
+        title="Disconnect ATS"
+        description={`Are you sure you want to disconnect ${atsDisconnectPlatform ? atsDisconnectPlatform.charAt(0).toUpperCase() + atsDisconnectPlatform.slice(1) : ""}? Scorecards will no longer be pushed automatically.`}
+        confirmLabel="Disconnect"
+        variant="warning"
+      />
     </div>
   );
 }

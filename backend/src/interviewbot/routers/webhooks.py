@@ -13,11 +13,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
 from interviewbot.dependencies import get_db, get_org_id, require_role
+from interviewbot.models.schemas import (
+    WebhookConfigItem,
+    WebhookConfigListResponse,
+    WebhookErrorResponse,
+    WebhookUpdateResponse,
+)
 from interviewbot.models.tables import Organization
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
+
+
+def _mask_secret(wh: dict) -> dict:
+    out = dict(wh)
+    s = out.get("secret", "")
+    if len(s) >= 8:
+        out["secret"] = "****" + s[-4:]
+    elif s:
+        out["secret"] = "***"
+    return out
 
 
 class WebhookConfig(BaseModel):
@@ -26,32 +42,33 @@ class WebhookConfig(BaseModel):
     secret: str = Field("", description="HMAC secret for signature verification")
 
 
-@router.get("/config")
+@router.get("/config", response_model=WebhookConfigListResponse)
 async def get_webhook_config(
     user: dict = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
-) -> dict:
+) -> WebhookConfigListResponse:
     result = await db.execute(select(Organization).where(Organization.id == org_id))
     org = result.scalar_one_or_none()
     if not org:
-        return {"webhooks": []}
+        return WebhookConfigListResponse(webhooks=[])
 
     webhook_settings = (org.settings or {}).get("webhooks", [])
-    return {"webhooks": webhook_settings}
+    masked = [_mask_secret(wh) for wh in webhook_settings]
+    return WebhookConfigListResponse(webhooks=[WebhookConfigItem(**wh) for wh in masked])
 
 
-@router.post("/config")
+@router.post("/config", response_model=WebhookUpdateResponse | WebhookErrorResponse)
 async def update_webhook_config(
     config: WebhookConfig,
     user: dict = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
-) -> dict:
+) -> WebhookUpdateResponse | WebhookErrorResponse:
     result = await db.execute(select(Organization).where(Organization.id == org_id))
     org = result.scalar_one_or_none()
     if not org:
-        return {"error": "Organization not found"}
+        return WebhookErrorResponse(error="Organization not found")
 
     settings = org.settings or {}
     webhooks = settings.get("webhooks", [])
@@ -65,7 +82,11 @@ async def update_webhook_config(
     org.settings = settings
     await db.commit()
 
-    return {"status": "updated" if existing_idx is not None else "added", "webhooks": webhooks}
+    masked = [_mask_secret(wh) for wh in webhooks]
+    return WebhookUpdateResponse(
+        status="updated" if existing_idx is not None else "added",
+        webhooks=[WebhookConfigItem(**wh) for wh in masked],
+    )
 
 
 async def dispatch_webhook(org_id: str, event_type: str, payload: dict, db: AsyncSession) -> None:
@@ -111,5 +132,5 @@ async def dispatch_webhook(org_id: str, event_type: str, payload: dict, db: Asyn
                     },
                 )
             logger.info("webhook_dispatched", url=url, event=event_type)
-        except Exception as e:
+        except (httpx.HTTPError, httpx.TimeoutException, OSError) as e:
             logger.warning("webhook_failed", url=url, event=event_type, error=str(e))

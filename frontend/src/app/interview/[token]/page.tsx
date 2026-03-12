@@ -12,14 +12,14 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { InterviewPhase } from "@/lib/types";
 
-type Phase = "loading" | "consent" | "ready" | "interview" | "completed" | "error";
 type ChatMessage = { role: "interviewer" | "candidate"; content: string };
 
 export default function CandidateInterviewPage() {
   const { token } = useParams<{ token: string }>();
   const router = useRouter();
-  const [phase, setPhase] = useState<Phase>("loading");
+  const [phase, setPhase] = useState<InterviewPhase>("loading");
   const [jobTitle, setJobTitle] = useState("");
   const [jobDescription, setJobDescription] = useState("");
   const [interviewConfig, setInterviewConfig] = useState<Record<string, unknown>>({});
@@ -232,14 +232,20 @@ export default function CandidateInterviewPage() {
             Something went wrong
           </h2>
           <p className="mt-2 text-sm text-slate-400">{error}</p>
-          {reconnectFailed && (
+          <div className="mt-6 flex items-center justify-center gap-3">
             <button
               onClick={() => window.location.reload()}
-              className="mt-6 rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+              className="rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
             >
               Try Again
             </button>
-          )}
+            <button
+              onClick={() => router.push("/")}
+              className="rounded-lg border border-slate-600 bg-slate-800 px-6 py-2.5 text-sm font-medium text-white hover:bg-slate-700 transition-colors"
+            >
+              Go Home
+            </button>
+          </div>
         </div>
       </div>
     );

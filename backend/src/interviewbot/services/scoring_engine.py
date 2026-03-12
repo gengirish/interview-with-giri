@@ -51,12 +51,7 @@ async def score_interview(session_id: str, db: AsyncSession) -> CandidateReport 
         logger.warning("score_no_messages", session_id=session_id)
         return None
 
-    transcript_lines = []
-    for msg in messages:
-        speaker = "Interviewer" if msg.role == "interviewer" else "Candidate"
-        transcript_lines.append(f"{speaker}: {msg.content}")
-    transcript = "\n\n".join(transcript_lines)
-
+    transcript = _build_transcript(messages)
     skills = ", ".join(job.required_skills or [])
     is_swe = (job.role_type or "").lower() in _SWE_ROLE_TYPES
 
@@ -83,7 +78,7 @@ async def score_interview(session_id: str, db: AsyncSession) -> CandidateReport 
             [{"role": "user", "content": prompt}],
             temperature=0.2,
         )
-        scores = _parse_scoring_response(raw_response, is_swe)
+        scores = _parse_score_response(raw_response, is_swe)
         if scores.get("summary") != "Unable to parse scoring response.":
             break
         logger.warning("score_parse_retry_full", attempt=attempt + 1, session_id=session_id)
@@ -125,7 +120,15 @@ async def score_interview(session_id: str, db: AsyncSession) -> CandidateReport 
     return report
 
 
-def _parse_scoring_response(raw_response: str, is_swe: bool) -> dict:
+def _build_transcript(messages: list[InterviewMessage]) -> str:
+    transcript_lines = []
+    for msg in messages:
+        speaker = "Interviewer" if msg.role == "interviewer" else "Candidate"
+        transcript_lines.append(f"{speaker}: {msg.content}")
+    return "\n\n".join(transcript_lines)
+
+
+def _parse_score_response(response_text: str, is_swe: bool = False) -> dict:
     """Parse LLM JSON response. Returns fallback dict on failure."""
     fallback = {
         "skill_scores": {},
@@ -144,12 +147,12 @@ def _parse_scoring_response(raw_response: str, is_swe: bool) -> dict:
         fallback["hiring_level_fit"] = ""
 
     try:
-        cleaned = raw_response.strip()
+        cleaned = response_text.strip()
         if cleaned.startswith("```"):
             cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
         return json_mod.loads(cleaned)
     except json_mod.JSONDecodeError as e:
-        logger.error("score_parse_failed", raw=raw_response[:200], error=str(e))
+        logger.error("score_parse_failed", raw=response_text[:200], error=str(e))
         return fallback
 
 

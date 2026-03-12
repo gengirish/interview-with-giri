@@ -1,29 +1,55 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from passlib.context import CryptContext
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from interviewbot.dependencies import get_db, get_org_id, require_role
-from interviewbot.models.schemas import InviteUserRequest, UpdateUserRoleRequest, UserResponse
+from interviewbot.models.schemas import (
+    InviteUserRequest,
+    PaginatedResponse,
+    UpdateUserRoleRequest,
+    UserResponse,
+)
 from interviewbot.models.tables import User
 
 router = APIRouter(prefix="/users", tags=["User Management"])
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-@router.get("", response_model=list[UserResponse])
+async def _get_user_or_404(db: AsyncSession, user_id: UUID, org_id: UUID) -> User:
+    result = await db.execute(select(User).where(User.id == user_id, User.org_id == org_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return user
+
+
+@router.get("", response_model=PaginatedResponse)
 async def list_users(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
     user: dict = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
-) -> list[UserResponse]:
+) -> PaginatedResponse:
+    base_query = select(User).where(User.org_id == org_id)
+
+    count_result = await db.execute(select(func.count()).select_from(base_query.subquery()))
+    total = count_result.scalar() or 0
+
     result = await db.execute(
-        select(User).where(User.org_id == org_id).order_by(User.created_at.desc())
+        base_query.order_by(User.created_at.desc()).offset((page - 1) * per_page).limit(per_page)
     )
     users = result.scalars().all()
-    return [_to_response(u) for u in users]
+
+    return PaginatedResponse(
+        items=[_to_response(u) for u in users],
+        total=total,
+        page=page,
+        per_page=per_page,
+    )
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -58,10 +84,7 @@ async def update_user_role(
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> UserResponse:
-    result = await db.execute(select(User).where(User.id == user_id, User.org_id == org_id))
-    target = result.scalar_one_or_none()
-    if not target:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    target = await _get_user_or_404(db, user_id, org_id)
 
     if str(target.id) == user.get("sub"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot change your own role")
@@ -79,10 +102,7 @@ async def deactivate_user(
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> UserResponse:
-    result = await db.execute(select(User).where(User.id == user_id, User.org_id == org_id))
-    target = result.scalar_one_or_none()
-    if not target:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    target = await _get_user_or_404(db, user_id, org_id)
 
     if str(target.id) == user.get("sub"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot deactivate yourself")

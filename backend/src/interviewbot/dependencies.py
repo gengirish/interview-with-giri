@@ -29,8 +29,8 @@ async def get_current_user(
             algorithms=[settings.jwt_algorithm],
         )
         return payload
-    except JWTError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token") from None
+    except JWTError as e:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired token") from e
 
 
 async def get_org_id(request: Request) -> UUID:

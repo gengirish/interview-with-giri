@@ -75,7 +75,7 @@ async def test_admin_can_list_users(client):
     admin_h, _, _ = await _setup_org_with_roles(client)
     resp = await client.get("/api/v1/users", headers=admin_h)
     assert resp.status_code == 200
-    assert len(resp.json()) == 3
+    assert len(resp.json()["items"]) == 3
 
 
 @pytest.mark.asyncio
@@ -127,7 +127,7 @@ async def test_viewer_cannot_invite_user(client):
 @pytest.mark.asyncio
 async def test_admin_can_change_user_role(client):
     admin_h, _, _ = await _setup_org_with_roles(client)
-    users = (await client.get("/api/v1/users", headers=admin_h)).json()
+    users = (await client.get("/api/v1/users", headers=admin_h)).json()["items"]
     hm_user = next(u for u in users if u["role"] == "hiring_manager")
 
     resp = await client.patch(
@@ -155,7 +155,7 @@ async def test_admin_cannot_change_own_role(client):
 @pytest.mark.asyncio
 async def test_admin_can_deactivate_user(client):
     admin_h, _, _ = await _setup_org_with_roles(client)
-    users = (await client.get("/api/v1/users", headers=admin_h)).json()
+    users = (await client.get("/api/v1/users", headers=admin_h)).json()["items"]
     viewer_user = next(u for u in users if u["role"] == "viewer")
 
     resp = await client.patch(f"/api/v1/users/{viewer_user['id']}/deactivate", headers=admin_h)
@@ -166,7 +166,7 @@ async def test_admin_can_deactivate_user(client):
 @pytest.mark.asyncio
 async def test_deactivated_user_cannot_login(client):
     admin_h, _, _ = await _setup_org_with_roles(client)
-    users = (await client.get("/api/v1/users", headers=admin_h)).json()
+    users = (await client.get("/api/v1/users", headers=admin_h)).json()["items"]
     viewer_user = next(u for u in users if u["role"] == "viewer")
 
     await client.patch(f"/api/v1/users/{viewer_user['id']}/deactivate", headers=admin_h)

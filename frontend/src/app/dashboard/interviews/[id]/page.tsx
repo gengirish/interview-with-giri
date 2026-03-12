@@ -31,7 +31,7 @@ import {
   Target,
   Download,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatDuration, formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -233,22 +233,6 @@ export default function InterviewDetailPage() {
     } finally {
       setGenerating(false);
     }
-  }
-
-  function formatDuration(seconds: number | null): string {
-    if (!seconds) return "--";
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}m ${s}s`;
-  }
-
-  function formatDate(dateStr: string | null): string {
-    if (!dateStr) return "--";
-    return new Date(dateStr).toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
   }
 
   function scoreColor(score: number): string {
@@ -507,8 +491,10 @@ export default function InterviewDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1">
+      <div className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1" role="tablist">
         <button
+          role="tab"
+          aria-selected={activeTab === "scorecard"}
           onClick={() => setActiveTab("scorecard")}
           className={cn(
             "flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors",
@@ -521,6 +507,8 @@ export default function InterviewDetailPage() {
           Scorecard
         </button>
         <button
+          role="tab"
+          aria-selected={activeTab === "integrity"}
           onClick={() => setActiveTab("integrity")}
           className={cn(
             "flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors",
@@ -533,6 +521,8 @@ export default function InterviewDetailPage() {
           Integrity
         </button>
         <button
+          role="tab"
+          aria-selected={activeTab === "transcript"}
           onClick={() => setActiveTab("transcript")}
           className={cn(
             "flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors",

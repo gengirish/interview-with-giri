@@ -122,6 +122,101 @@ async def _save_message(db: AsyncSession, session_id, role: str, content: str) -
     await db.commit()
 
 
+async def _send_json(websocket: WebSocket, data: dict) -> None:
+    await websocket.send_json(data)
+
+
+async def _handle_end_interview(
+    session: InterviewSession,
+    db: AsyncSession,
+    websocket: WebSocket,
+    questions: int,
+) -> None:
+    session.status = "completed"
+    session.completed_at = datetime.now(UTC)
+    if session.started_at:
+        session.duration_seconds = int((session.completed_at - session.started_at).total_seconds())
+    await db.commit()
+    logger.info(
+        "interview_completed",
+        session_id=str(session.id),
+        questions=questions,
+    )
+
+
+async def _process_candidate_message(
+    session: InterviewSession,
+    candidate_text: str,
+    conversation: InterviewConversation,
+    tracker: FollowUpTracker | None,
+    engine: AIEngine,
+    job: JobPosting,
+    config: dict,
+    total_questions: int,
+    is_technical: bool,
+    db: AsyncSession,
+    websocket: WebSocket,
+) -> tuple[str, int, bool]:
+    is_code_submission = "[Code Submission]" in candidate_text
+
+    conversation.add_message("user", candidate_text)
+    await _save_message(db, session.id, "candidate", candidate_text)
+    await _send_json(websocket, {"type": "thinking"})
+
+    injections_added = 0
+    if is_code_submission and is_technical:
+        code = _extract_code(candidate_text)
+        if code:
+            code_context = (
+                f"\n\n[The candidate just submitted this code:\n```\n"
+                f"{code[:2000]}\n```\n"
+                f"Analyze their code and respond as a pair-programming partner. "
+                f"Acknowledge something specific they did well, then probe a design "
+                f"decision, then suggest a twist or follow-up scenario. "
+                f"Keep it conversational.]"
+            )
+            conversation.add_message("system", code_context)
+            injections_added += 1
+    if tracker and tracker.should_probe_deeper():
+        depth_hint = tracker.get_depth_hint()
+        if depth_hint:
+            conversation.add_message("system", depth_hint)
+            injections_added += 1
+
+    response = await engine.chat(conversation.get_messages())
+
+    for _ in range(injections_added):
+        conversation.messages.pop(-1)
+
+    if tracker:
+        if "?" in response:
+            tracker.on_new_question()
+        else:
+            tracker.on_follow_up()
+
+    conversation.add_message("assistant", response)
+    await _save_message(db, session.id, "interviewer", response)
+
+    progress = conversation.get_question_count()
+    should_end = progress >= total_questions
+
+    if should_end:
+        await _send_json(websocket, {"type": "end", "content": response})
+    else:
+        msg_type = "code_review" if (is_code_submission and is_technical) else "question"
+        await _send_json(
+            websocket,
+            {
+                "type": msg_type,
+                "content": response,
+                "progress": progress,
+                "total": total_questions,
+            },
+        )
+
+    return response, progress, should_end
+
+
 async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSession) -> None:
     await websocket.accept()
 
@@ -129,13 +224,14 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
     session = result.scalar_one_or_none()
 
     if not session:
-        await websocket.send_json({"type": "error", "content": "Invalid interview token"})
+        await _send_json(websocket, {"type": "error", "content": "Invalid interview token"})
         await websocket.close()
         return
 
     if session.status == "completed":
-        await websocket.send_json(
-            {"type": "error", "content": "This interview has already been completed"}
+        await _send_json(
+            websocket,
+            {"type": "error", "content": "This interview has already been completed"},
         )
         await websocket.close()
         return
@@ -145,7 +241,7 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
     )
     job = job_result.scalar_one_or_none()
     if not job:
-        await websocket.send_json({"type": "error", "content": "Job posting not found"})
+        await _send_json(websocket, {"type": "error", "content": "Job posting not found"})
         await websocket.close()
         return
 
@@ -167,13 +263,14 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
         conversation.add_message("assistant", first_question)
         await _save_message(db, session.id, "interviewer", first_question)
 
-        await websocket.send_json(
+        await _send_json(
+            websocket,
             {
                 "type": "question",
                 "content": first_question,
                 "progress": 1,
                 "total": total_questions,
-            }
+            },
         )
 
         if tracker:
@@ -188,68 +285,21 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
 
             if msg.get("type") == "message":
                 candidate_text = msg.get("content", "")
-                is_code_submission = "[Code Submission]" in candidate_text
-
-                conversation.add_message("user", candidate_text)
-                await _save_message(db, session.id, "candidate", candidate_text)
-                await websocket.send_json({"type": "thinking"})
-
-                injections_added = 0
-                if is_code_submission and is_technical:
-                    code = _extract_code(candidate_text)
-                    if code:
-                        code_context = (
-                            f"\n\n[The candidate just submitted this code:\n```\n"
-                            f"{code[:2000]}\n```\n"
-                            f"Analyze their code and respond as a pair-programming partner. "
-                            f"Acknowledge something specific they did well, then probe a design "
-                            f"decision, then suggest a twist or follow-up scenario. "
-                            f"Keep it conversational.]"
-                        )
-                        conversation.add_message("system", code_context)
-                        injections_added += 1
-                if tracker and tracker.should_probe_deeper():
-                    depth_hint = tracker.get_depth_hint()
-                    if depth_hint:
-                        conversation.add_message("system", depth_hint)
-                        injections_added += 1
-
-                response = await engine.chat(conversation.get_messages())
-
-                for _ in range(injections_added):
-                    conversation.messages.pop(-1)
-
-                if tracker:
-                    if "?" in response:
-                        tracker.on_new_question()
-                    else:
-                        tracker.on_follow_up()
-
-                conversation.add_message("assistant", response)
-                await _save_message(db, session.id, "interviewer", response)
-
-                progress = conversation.get_question_count()
-
-                if progress >= total_questions:
-                    await websocket.send_json(
-                        {
-                            "type": "end",
-                            "content": response,
-                        }
-                    )
+                _, _, should_end = await _process_candidate_message(
+                    session,
+                    candidate_text,
+                    conversation,
+                    tracker,
+                    engine,
+                    job,
+                    config,
+                    total_questions,
+                    is_technical,
+                    db,
+                    websocket,
+                )
+                if should_end:
                     break
-                else:
-                    msg_type = (
-                        "code_review" if (is_code_submission and is_technical) else "question"
-                    )
-                    await websocket.send_json(
-                        {
-                            "type": msg_type,
-                            "content": response,
-                            "progress": progress,
-                            "total": total_questions,
-                        }
-                    )
 
     except WebSocketDisconnect:
         logger.info("candidate_disconnected", session_id=str(session.id))
@@ -259,21 +309,12 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
     except Exception as e:
         logger.error("interview_error", error=str(e), session_id=str(session.id))
         with contextlib.suppress(Exception):
-            await websocket.send_json(
-                {"type": "error", "content": "An error occurred. Please try again."}
+            await _send_json(
+                websocket,
+                {"type": "error", "content": "An error occurred. Please try again."},
             )
         session.status = "disconnected"
         await db.commit()
         return
 
-    session.status = "completed"
-    session.completed_at = datetime.now(UTC)
-    if session.started_at:
-        session.duration_seconds = int((session.completed_at - session.started_at).total_seconds())
-    await db.commit()
-
-    logger.info(
-        "interview_completed",
-        session_id=str(session.id),
-        questions=conversation.get_question_count(),
-    )
+    await _handle_end_interview(session, db, websocket, conversation.get_question_count())

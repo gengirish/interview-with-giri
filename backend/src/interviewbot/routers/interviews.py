@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -10,7 +11,9 @@ from interviewbot.models.schemas import (
     InterviewMessageResponse,
     InterviewSessionResponse,
     InterviewStartRequest,
+    InterviewStartResponse,
     PaginatedResponse,
+    PublicInterviewInfoResponse,
 )
 from interviewbot.models.tables import InterviewMessage, InterviewSession, JobPosting
 from interviewbot.routers.auth import limiter
@@ -24,7 +27,8 @@ router = APIRouter(prefix="/interviews", tags=["Interviews"])
 @router.get("", response_model=PaginatedResponse)
 async def list_interviews(
     job_id: UUID | None = None,
-    status_filter: str | None = Query(None, alias="status"),
+    status_filter: Literal["pending", "in_progress", "completed", "expired", "disconnected"]
+    | None = Query(None, alias="status"),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
@@ -112,13 +116,13 @@ async def get_interview_messages(
 # --- Public endpoints (candidate-facing) ---
 
 
-@router.get("/public/{token}")
+@router.get("/public/{token}", response_model=PublicInterviewInfoResponse)
 @limiter.limit("30/minute")
 async def get_public_interview(
     request: Request,
     token: str,
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> PublicInterviewInfoResponse:
     result = await db.execute(select(InterviewSession).where(InterviewSession.token == token))
     session = result.scalar_one_or_none()
     if not session:
@@ -129,24 +133,24 @@ async def get_public_interview(
     )
     job = job_result.scalar_one_or_none()
 
-    return {
-        "token": session.token,
-        "status": session.status,
-        "format": session.format,
-        "job_title": job.title if job else "Unknown Position",
-        "job_description": job.job_description[:500] if job else "",
-        "interview_config": job.interview_config if job else {},
-    }
+    return PublicInterviewInfoResponse(
+        token=session.token,
+        status=session.status,
+        format=session.format,
+        job_title=job.title if job else "Unknown Position",
+        job_description=job.job_description[:500] if job else "",
+        interview_config=job.interview_config if job else {},
+    )
 
 
-@router.post("/public/{token}/start")
+@router.post("/public/{token}/start", response_model=InterviewStartResponse)
 @limiter.limit("10/minute")
 async def start_public_interview(
     request: Request,
     token: str,
     req: InterviewStartRequest,
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> InterviewStartResponse:
     result = await db.execute(select(InterviewSession).where(InterviewSession.token == token))
     session = result.scalar_one_or_none()
     if not session:
@@ -161,11 +165,11 @@ async def start_public_interview(
     session.started_at = datetime.now(UTC)
     await db.commit()
 
-    return {
-        "token": session.token,
-        "status": session.status,
-        "message": "Ready to begin. Connect via WebSocket to start the interview.",
-    }
+    return InterviewStartResponse(
+        token=session.token,
+        status=session.status,
+        message="Ready to begin. Connect via WebSocket to start the interview.",
+    )
 
 
 def _session_to_response(session: InterviewSession) -> InterviewSessionResponse:

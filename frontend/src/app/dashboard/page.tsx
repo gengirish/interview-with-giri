@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { api, type DashboardStats } from "@/lib/api";
 import {
   Briefcase,
@@ -38,47 +38,51 @@ export default function DashboardPage() {
     fetchStats();
   }, []);
 
-  const cards = stats
-    ? [
-        {
-          label: "Active Jobs",
-          value: String(stats.active_jobs),
-          icon: Briefcase,
-          color: "text-indigo-600 bg-indigo-50",
-        },
-        {
-          label: "Total Interviews",
-          value: String(stats.total_interviews),
-          icon: MessageSquare,
-          color: "text-blue-600 bg-blue-50",
-        },
-        {
-          label: "This Month",
-          value: String(stats.interviews_this_month),
-          icon: CalendarDays,
-          color: "text-violet-600 bg-violet-50",
-        },
-        {
-          label: "Completed",
-          value: String(stats.completed_interviews),
-          icon: Users,
-          color: "text-emerald-600 bg-emerald-50",
-        },
-        {
-          label: "Avg Score",
-          value: stats.avg_score != null ? stats.avg_score.toFixed(1) : "N/A",
-          icon: TrendingUp,
-          color: "text-amber-600 bg-amber-50",
-        },
-        {
-          label: "Pass Rate",
-          value:
-            stats.pass_rate != null ? `${stats.pass_rate.toFixed(0)}%` : "N/A",
-          icon: Target,
-          color: "text-rose-600 bg-rose-50",
-        },
-      ]
-    : [];
+  const cards = useMemo(
+    () =>
+      stats
+        ? [
+            {
+              label: "Active Jobs",
+              value: String(stats.active_jobs),
+              icon: Briefcase,
+              color: "text-indigo-600 bg-indigo-50",
+            },
+            {
+              label: "Total Interviews",
+              value: String(stats.total_interviews),
+              icon: MessageSquare,
+              color: "text-blue-600 bg-blue-50",
+            },
+            {
+              label: "This Month",
+              value: String(stats.interviews_this_month),
+              icon: CalendarDays,
+              color: "text-violet-600 bg-violet-50",
+            },
+            {
+              label: "Completed",
+              value: String(stats.completed_interviews),
+              icon: Users,
+              color: "text-emerald-600 bg-emerald-50",
+            },
+            {
+              label: "Avg Score",
+              value: stats.avg_score != null ? stats.avg_score.toFixed(1) : "N/A",
+              icon: TrendingUp,
+              color: "text-amber-600 bg-amber-50",
+            },
+            {
+              label: "Pass Rate",
+              value:
+                stats.pass_rate != null ? `${stats.pass_rate.toFixed(0)}%` : "N/A",
+              icon: Target,
+              color: "text-rose-600 bg-rose-50",
+            },
+          ]
+        : [],
+    [stats]
+  );
 
   return (
     <div className="space-y-6">
@@ -104,6 +108,7 @@ export default function DashboardPage() {
           </p>
           <button
             onClick={fetchStats}
+            aria-label="Retry loading dashboard"
             className="mt-6 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
           >
             Retry

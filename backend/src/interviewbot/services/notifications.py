@@ -137,6 +137,6 @@ async def _send_email(to_email: str, subject: str, html: str) -> bool:
 
         logger.info("email_sent", to=to_email, subject=subject)
         return True
-    except Exception as e:
+    except (smtplib.SMTPException, OSError) as e:
         logger.error("email_failed", to=to_email, error=str(e))
         return False

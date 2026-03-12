@@ -11,7 +11,7 @@ import {
   AlertCircle,
   Eye,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatDuration, formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -73,23 +73,6 @@ export default function InterviewsPage() {
     setLoading(true);
     load();
   }, [load]);
-
-  function formatDuration(seconds: number | null): string {
-    if (!seconds) return "--";
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}m ${s}s`;
-  }
-
-  function formatDate(d: string | null): string {
-    if (!d) return "--";
-    return new Date(d).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
 
   if (loading) {
     return (

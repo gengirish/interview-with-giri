@@ -8,7 +8,12 @@ import structlog
 
 from interviewbot.config import get_settings
 from interviewbot.dependencies import get_db, get_org_id, require_role
-from interviewbot.models.schemas import CheckoutRequest, SubscriptionResponse
+from interviewbot.models.schemas import (
+    CheckoutRequest,
+    CheckoutResponse,
+    PlanResponse,
+    SubscriptionResponse,
+)
 from interviewbot.models.tables import Organization, Subscription
 
 logger = structlog.get_logger()
@@ -78,18 +83,17 @@ async def get_subscription(
     )
 
 
-@router.post("/checkout")
+@router.post("/checkout", response_model=CheckoutResponse)
 async def create_checkout(
     req: CheckoutRequest,
     user: dict = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
-) -> dict:
+) -> CheckoutResponse:
     settings = get_settings()
     if not settings.stripe_secret_key:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Stripe not configured")
 
-    stripe.api_key = settings.stripe_secret_key
     plan = PLAN_CONFIGS.get(req.plan_id)
     if not plan:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid plan")
@@ -101,6 +105,7 @@ async def create_checkout(
 
     try:
         checkout_session = stripe.checkout.Session.create(
+            api_key=settings.stripe_secret_key,
             mode="subscription",
             line_items=[
                 {
@@ -124,7 +129,7 @@ async def create_checkout(
             cancel_url=req.cancel_url,
             client_reference_id=str(org_id),
         )
-        return {"url": checkout_session.url}
+        return CheckoutResponse(url=checkout_session.url)
     except stripe.StripeError as e:
         logger.error("stripe_checkout_error", error=str(e))
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Stripe error") from e
@@ -141,12 +146,11 @@ async def stripe_webhook(
 
     payload = await request.body()
     sig = request.headers.get("stripe-signature", "")
-    stripe.api_key = settings.stripe_secret_key
 
     try:
         event = stripe.Webhook.construct_event(payload, sig, settings.stripe_webhook_secret)
-    except (ValueError, stripe.SignatureVerificationError):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid webhook signature") from None
+    except (ValueError, stripe.SignatureVerificationError) as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid webhook signature") from e
 
     event_type = event["type"]
     data = event["data"]["object"]
@@ -210,16 +214,16 @@ async def stripe_webhook(
     return {"received": True}
 
 
-@router.get("/plans")
-async def get_plans() -> list[dict]:
+@router.get("/plans", response_model=list[PlanResponse])
+async def get_plans() -> list[PlanResponse]:
     return [
-        {
-            "id": plan_id,
-            "name": config["name"],
-            "price_monthly": config["price_monthly"] / 100,
-            "interviews_limit": config["interviews_limit"],
-            "max_users": config["max_users"],
-            "allowed_formats": config["allowed_formats"],
-        }
+        PlanResponse(
+            id=plan_id,
+            name=config["name"],
+            price_monthly=config["price_monthly"] / 100,
+            interviews_limit=config["interviews_limit"],
+            max_users=config["max_users"],
+            allowed_formats=config["allowed_formats"],
+        )
         for plan_id, config in PLAN_CONFIGS.items()
     ]

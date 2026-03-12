@@ -38,7 +38,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False, index=True)
     email = Column(String(255), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     full_name = Column(String(255), nullable=False)
@@ -53,7 +53,7 @@ class Subscription(Base):
     __tablename__ = "subscription"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False, index=True)
     stripe_customer_id = Column(String(255))
     stripe_subscription_id = Column(String(255))
     plan_tier = Column(String(50), nullable=False, default="free")
@@ -71,7 +71,7 @@ class JobPosting(Base):
     __tablename__ = "job_posting"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False, index=True)
     title = Column(String(255), nullable=False)
     role_type = Column(String(50), nullable=False)
     job_description = Column(Text, nullable=False)
@@ -100,18 +100,20 @@ class InterviewSession(Base):
     __tablename__ = "interview_session"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    job_posting_id = Column(UUID(as_uuid=True), ForeignKey("job_posting.id"), nullable=False)
-    org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False)
+    job_posting_id = Column(
+        UUID(as_uuid=True), ForeignKey("job_posting.id"), nullable=False, index=True
+    )
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False, index=True)
     token = Column(String(64), unique=True, nullable=False)
     candidate_name = Column(String(255))
     candidate_email = Column(String(255))
-    status = Column(String(30), default="pending")
+    status = Column(String(30), default="pending", index=True)
     format = Column(String(20), default="text")
     overall_score = Column(Numeric(4, 2))
     duration_seconds = Column(Integer)
     started_at = Column(DateTime(timezone=True))
     completed_at = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), default=utcnow)
+    created_at = Column(DateTime(timezone=True), default=utcnow, index=True)
 
     job_posting = relationship("JobPosting", back_populates="sessions")
     messages = relationship(
@@ -143,7 +145,9 @@ class InterviewMessage(Base):
     __tablename__ = "interview_message"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    session_id = Column(UUID(as_uuid=True), ForeignKey("interview_session.id"), nullable=False)
+    session_id = Column(
+        UUID(as_uuid=True), ForeignKey("interview_session.id"), nullable=False, index=True
+    )
     role = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
     media_url = Column(Text)

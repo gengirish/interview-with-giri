@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useRouter } from "next/navigation";
 import {
   UserPlus,
@@ -33,6 +34,7 @@ export default function TeamPage() {
     password: "",
   });
   const [submitting, setSubmitting] = useState(false);
+  const [deactivateUserId, setDeactivateUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isAuthenticated && !hasRole("admin")) {
@@ -88,6 +90,8 @@ export default function TeamPage() {
       loadUsers();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update user");
+    } finally {
+      setDeactivateUserId(null);
     }
   }
 
@@ -260,7 +264,9 @@ export default function TeamPage() {
                 </div>
                 <div className="col-span-3 flex justify-end gap-2">
                   <button
-                    onClick={() => handleToggleActive(u.id)}
+                    onClick={() =>
+                      u.is_active ? setDeactivateUserId(u.id) : handleToggleActive(u.id)
+                    }
                     className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                     title={u.is_active ? "Deactivate" : "Activate"}
                     aria-label={u.is_active ? "Deactivate user" : "Activate user"}
@@ -326,6 +332,20 @@ export default function TeamPage() {
           ))}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={deactivateUserId !== null}
+        onConfirm={() => deactivateUserId && handleToggleActive(deactivateUserId)}
+        onCancel={() => setDeactivateUserId(null)}
+        title="Deactivate team member"
+        description={
+          deactivateUserId
+            ? `Are you sure you want to deactivate ${users.find((u) => u.id === deactivateUserId)?.full_name ?? "this user"}? They will lose access to the organization.`
+            : ""
+        }
+        confirmLabel="Deactivate"
+        variant="warning"
+      />
     </div>
   );
 }

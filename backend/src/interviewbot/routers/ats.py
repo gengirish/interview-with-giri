@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -61,7 +62,7 @@ async def save_ats_config(
 
 @router.delete("/config/{platform}")
 async def delete_ats_config(
-    platform: str,
+    platform: Literal["greenhouse", "lever", "workable"],
     user: dict = Depends(require_role("admin", "hiring_manager")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),

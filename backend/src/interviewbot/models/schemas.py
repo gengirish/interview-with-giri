@@ -223,10 +223,23 @@ class SubscriptionResponse(BaseModel):
     status: str
 
 
+class PlanResponse(BaseModel):
+    id: str
+    name: str
+    price_monthly: float
+    interviews_limit: int
+    max_users: int
+    allowed_formats: list[str]
+
+
 class CheckoutRequest(BaseModel):
     plan_id: str
     success_url: str = "http://localhost:3000/settings?billing=success"
     cancel_url: str = "http://localhost:3000/settings?billing=cancelled"
+
+
+class CheckoutResponse(BaseModel):
+    url: str
 
 
 # --- Dashboard ---
@@ -239,6 +252,62 @@ class DashboardStats(BaseModel):
     avg_score: float | None
     interviews_this_month: int
     pass_rate: float | None
+
+
+class AnalyticsOverviewResponse(BaseModel):
+    total_interviews: int
+    completed_interviews: int
+    completion_rate: float
+    avg_score: float | None
+    avg_duration_minutes: float | None
+    score_distribution: dict[str, int]
+    status_breakdown: dict[str, int]
+    format_breakdown: dict[str, int]
+
+
+class JobAnalyticsResponse(BaseModel):
+    job_id: str
+    title: str
+    role_type: str
+    is_active: bool
+    total_interviews: int
+    completed_interviews: int
+    avg_score: float | None
+    avg_duration_minutes: float | None
+
+
+class PublicInterviewInfoResponse(BaseModel):
+    token: str
+    status: str
+    format: str
+    job_title: str
+    job_description: str
+    interview_config: dict
+
+
+class InterviewStartResponse(BaseModel):
+    token: str
+    status: str
+    message: str
+
+
+class WebhookConfigItem(BaseModel):
+    url: str
+    events: list[str]
+    secret: str
+
+
+class WebhookConfigListResponse(BaseModel):
+    webhooks: list[WebhookConfigItem]
+
+
+class WebhookUpdateResponse(BaseModel):
+    status: str
+    webhooks: list[WebhookConfigItem]
+
+
+class WebhookErrorResponse(BaseModel):
+    error: str
 
 
 # --- User Management ---

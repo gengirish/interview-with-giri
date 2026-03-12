@@ -1,5 +1,5 @@
 from jose import jwt
-from jose.exceptions import JWTError
+from jose.exceptions import ExpiredSignatureError, JWTError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -14,6 +14,7 @@ PUBLIC_PATHS = {
     "/api/v1/auth/login",
     "/api/v1/auth/signup",
     "/api/v1/billing/webhook",
+    "/api/v1/billing/plans",
     "/api/docs",
     "/api/redoc",
     "/openapi.json",
@@ -49,11 +50,7 @@ class TenantMiddleware(BaseHTTPMiddleware):
                     algorithms=[settings.jwt_algorithm],
                 )
                 request.state.org_id = payload.get("org_id")
-            except JWTError:
-                # Invalid/expired token will be handled by auth dependencies later.
-                request.state.org_id = None
-            except Exception as exc:
-                logger.warning("tenant_middleware_decode_failed", error=str(exc))
+            except (JWTError, ExpiredSignatureError):
                 request.state.org_id = None
 
         return await call_next(request)

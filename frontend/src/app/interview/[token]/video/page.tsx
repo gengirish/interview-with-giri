@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import {
   Mic,
@@ -14,13 +14,14 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { InterviewPhase } from "@/lib/types";
 
-type Phase = "loading" | "consent" | "setup" | "interview" | "completed" | "error";
 type TranscriptEntry = { role: "interviewer" | "candidate"; content: string };
 
 export default function VideoInterviewPage() {
   const { token } = useParams<{ token: string }>();
-  const [phase, setPhase] = useState<Phase>("loading");
+  const router = useRouter();
+  const [phase, setPhase] = useState<InterviewPhase>("loading");
   const [jobTitle, setJobTitle] = useState("");
   const [error, setError] = useState("");
   const [candidateName, setCandidateName] = useState("");
@@ -229,8 +230,22 @@ export default function VideoInterviewPage() {
       <div className="flex h-screen items-center justify-center bg-slate-950 p-4">
         <div className="max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-8 text-center">
           <AlertTriangle className="mx-auto h-12 w-12 text-red-400" />
-          <h2 className="mt-4 text-xl font-bold text-white">Error</h2>
+          <h2 className="mt-4 text-xl font-bold text-white">Something went wrong</h2>
           <p className="mt-2 text-sm text-slate-400">{error}</p>
+          <div className="mt-6 flex items-center justify-center gap-3">
+            <button
+              onClick={() => window.location.reload()}
+              className="rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+            >
+              Try Again
+            </button>
+            <button
+              onClick={() => router.push("/")}
+              className="rounded-lg border border-slate-600 bg-slate-800 px-6 py-2.5 text-sm font-medium text-white hover:bg-slate-700 transition-colors"
+            >
+              Go Home
+            </button>
+          </div>
         </div>
       </div>
     );

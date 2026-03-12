@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { api, type JobPosting } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -54,6 +55,7 @@ export default function JobsPage() {
   const [saving, setSaving] = useState(false);
   const [extracting, setExtracting] = useState<string | null>(null);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const [deleteJobId, setDeleteJobId] = useState<string | null>(null);
 
   const loadJobs = useCallback(async () => {
     try {
@@ -140,12 +142,13 @@ export default function JobsPage() {
   }
 
   async function handleDelete(jobId: string) {
-    if (!confirm("Delete this job posting?")) return;
     try {
       await api.deleteJobPosting(jobId);
       await loadJobs();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete job");
+    } finally {
+      setDeleteJobId(null);
     }
   }
 
@@ -450,7 +453,8 @@ export default function JobsPage() {
                   )}
                   {canDelete && (
                     <button
-                      onClick={() => handleDelete(job.id)}
+                      onClick={() => setDeleteJobId(job.id)}
+                      aria-label="Delete job posting"
                       className="rounded-lg border border-red-200 p-1.5 text-red-500 hover:bg-red-50 transition-colors"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -462,6 +466,16 @@ export default function JobsPage() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteJobId !== null}
+        onConfirm={() => deleteJobId && handleDelete(deleteJobId)}
+        onCancel={() => setDeleteJobId(null)}
+        title="Delete job posting"
+        description="Are you sure you want to delete this job posting? This action cannot be undone."
+        confirmLabel="Delete"
+        variant="danger"
+      />
     </div>
   );
 }
