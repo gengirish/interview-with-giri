@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import uuid
 
+import structlog
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-import structlog
 
 from interviewbot.dependencies import get_db, get_org_id, require_role
 from interviewbot.models.schemas import BehaviorEventCreate, BehaviorSummary, IntegrityAssessment
 from interviewbot.models.tables import BehaviorEvent, InterviewSession
+from interviewbot.routers.auth import limiter
 from interviewbot.services.audio_analysis import analyze_response_timing
 from interviewbot.services.behavior_analytics import (
     get_behavior_summary,
@@ -19,7 +20,6 @@ from interviewbot.services.behavior_analytics import (
     record_batch_events,
     record_behavior_event,
 )
-from interviewbot.routers.auth import limiter
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/proctoring", tags=["proctoring"])
