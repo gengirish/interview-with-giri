@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import uuid
 
-import structlog
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import structlog
 
 from interviewbot.dependencies import get_db, get_org_id, require_role
 from interviewbot.models.schemas import BehaviorEventCreate, BehaviorSummary, IntegrityAssessment
