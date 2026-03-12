@@ -1,15 +1,20 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 export default function InterviewError({
-  error: _error,
+  error,
   reset,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
 }) {
   const router = useRouter();
+
+  useEffect(() => {
+    console.error("Interview error:", error);
+  }, [error]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
