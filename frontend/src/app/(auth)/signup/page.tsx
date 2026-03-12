@@ -48,8 +48,9 @@ export default function SignupPage() {
 
         <form onSubmit={handleSubmit} className="space-y-5 rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Company Name</label>
+            <label htmlFor="signup-org-name" className="block text-sm font-medium text-slate-700 mb-1">Company Name</label>
             <input
+              id="signup-org-name"
               name="org_name"
               required
               value={formData.org_name}
@@ -60,8 +61,9 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+            <label htmlFor="signup-full-name" className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
             <input
+              id="signup-full-name"
               name="full_name"
               required
               value={formData.full_name}
@@ -72,8 +74,9 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+            <label htmlFor="signup-email" className="block text-sm font-medium text-slate-700 mb-1">Email</label>
             <input
+              id="signup-email"
               name="email"
               type="email"
               required
@@ -85,8 +88,9 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+            <label htmlFor="signup-password" className="block text-sm font-medium text-slate-700 mb-1">Password</label>
             <input
+              id="signup-password"
               name="password"
               type="password"
               required

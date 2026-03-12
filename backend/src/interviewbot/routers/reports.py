@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -5,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from interviewbot.dependencies import get_db, get_org_id, require_role
-from interviewbot.models.schemas import CandidateReportResponse, SkillScore, BehavioralScore
+from interviewbot.models.schemas import CandidateReportResponse, DimensionalScore
 from interviewbot.models.tables import CandidateReport, InterviewSession
 from interviewbot.services.scoring_engine import score_interview
 
@@ -65,6 +67,17 @@ async def get_report(
     return _to_response(report, session.candidate_name, session.overall_score)
 
 
+def _to_dimensional_score(v: dict) -> DimensionalScore:
+    """Build DimensionalScore from dict; backward-compatible with old {score, evidence} format."""
+    raw_score = v.get("score")
+    score = float(raw_score) if raw_score is not None else None
+    return DimensionalScore(
+        score=score,
+        evidence=v.get("evidence", ""),
+        notes=v.get("notes", ""),
+    )
+
+
 def _to_response(
     report: CandidateReport,
     candidate_name: str | None,
@@ -73,19 +86,14 @@ def _to_response(
     skill_scores = {}
     for k, v in (report.skill_scores or {}).items():
         if isinstance(v, dict):
-            skill_scores[k] = SkillScore(
-                score=float(v.get("score", 0)),
-                evidence=v.get("evidence", ""),
-            )
+            skill_scores[k] = _to_dimensional_score(v)
 
     behavioral_scores = {}
     for k, v in (report.behavioral_scores or {}).items():
         if isinstance(v, dict):
-            behavioral_scores[k] = BehavioralScore(
-                score=float(v.get("score", 0)),
-                evidence=v.get("evidence", ""),
-            )
+            behavioral_scores[k] = _to_dimensional_score(v)
 
+    extended = report.extended_data or {}
     return CandidateReportResponse(
         id=report.id,
         session_id=report.session_id,
@@ -98,5 +106,8 @@ def _to_response(
         concerns=report.concerns or [],
         recommendation=report.recommendation,
         confidence_score=float(report.confidence_score) if report.confidence_score else None,
+        experience_level_assessment=extended.get("experience_level_assessment") or None,
+        suggested_follow_up_areas=extended.get("suggested_follow_up_areas", []),
+        hiring_level_fit=extended.get("hiring_level_fit") or None,
         created_at=report.created_at,
     )

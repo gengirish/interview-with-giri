@@ -97,13 +97,16 @@ export interface CandidateReport {
   session_id: string;
   candidate_name: string | null;
   overall_score: number | null;
-  skill_scores: Record<string, { score: number; evidence: string }>;
-  behavioral_scores: Record<string, { score: number; evidence: string }>;
+  skill_scores: Record<string, { score: number | null; evidence: string; notes?: string }>;
+  behavioral_scores: Record<string, { score: number | null; evidence: string; notes?: string }>;
   ai_summary: string | null;
   strengths: string[];
   concerns: string[];
   recommendation: string | null;
   confidence_score: number | null;
+  summary?: string;
+  suggested_follow_up_areas?: string[];
+  hiring_level_fit?: string;
   created_at: string;
 }
 
@@ -152,6 +155,18 @@ export interface WebhookConfig {
   url: string;
   events: string[];
   secret: string;
+}
+
+export interface BehaviorEvent {
+  event_type:
+    | "keystroke"
+    | "paste"
+    | "tab_switch"
+    | "focus_loss"
+    | "idle"
+    | "code_submit";
+  timestamp: string;
+  data?: Record<string, unknown>;
 }
 
 export interface CodeExecutionResult {
@@ -323,6 +338,24 @@ export const api = {
     request<OrgUser>(`/api/v1/users/${userId}/deactivate`, {
       method: "PATCH",
     }),
+
+  // Proctoring / Integrity
+  getBehaviorSummary: (sessionId: string) =>
+    request<import("@/types").BehaviorSummary>(
+      `/api/v1/proctoring/summary/${sessionId}`,
+    ),
+  getIntegrityAssessment: (sessionId: string) =>
+    request<import("@/types").IntegrityAssessment>(
+      `/api/v1/proctoring/integrity/${sessionId}`,
+    ),
+  submitBehaviorEvents: (token: string, events: BehaviorEvent[]) =>
+    request<{ status: string; count: number }>(
+      `/api/v1/proctoring/events/${token}/batch`,
+      {
+        method: "POST",
+        body: JSON.stringify(events),
+      },
+    ),
 
   // Code Execution
   executeCode: (

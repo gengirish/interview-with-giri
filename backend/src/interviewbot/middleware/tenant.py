@@ -1,4 +1,6 @@
 from jose import jwt
+from jose.exceptions import JWTError
+import structlog
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -20,6 +22,8 @@ PUBLIC_PREFIXES = (
     "/api/v1/interviews/public/",
     "/ws/",
 )
+
+logger = structlog.get_logger()
 
 
 class TenantMiddleware(BaseHTTPMiddleware):
@@ -44,7 +48,11 @@ class TenantMiddleware(BaseHTTPMiddleware):
                     algorithms=[settings.jwt_algorithm],
                 )
                 request.state.org_id = payload.get("org_id")
-            except Exception:
-                pass
+            except JWTError:
+                # Invalid/expired token will be handled by auth dependencies later.
+                request.state.org_id = None
+            except Exception as exc:
+                logger.warning("tenant_middleware_decode_failed", error=str(exc))
+                request.state.org_id = None
 
         return await call_next(request)

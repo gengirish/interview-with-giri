@@ -3,6 +3,8 @@ import pytest
 
 from tests.conftest import SIGNUP_PAYLOAD
 
+pytestmark = pytest.mark.smoke
+
 
 @pytest.mark.asyncio
 async def test_signup_creates_account_and_returns_token(client):

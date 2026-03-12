@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
 from uuid import UUID
@@ -151,12 +153,34 @@ class InterviewMessageResponse(BaseModel):
 
 # --- Reports ---
 
+class DimensionalScore(BaseModel):
+    score: float | None = None
+    evidence: str = ""
+    notes: str = ""
+
+
+class SWEScorecard(BaseModel):
+    technical_scores: dict[str, DimensionalScore] = Field(default_factory=dict)
+    behavioral_scores: dict[str, DimensionalScore] = Field(default_factory=dict)
+    overall_score: float = 0.0
+    confidence_score: float = 0.0
+    experience_level_assessment: str = ""
+    summary: str = ""
+    strengths: list[str] = Field(default_factory=list)
+    concerns: list[str] = Field(default_factory=list)
+    recommendation: str = ""
+    suggested_follow_up_areas: list[str] = Field(default_factory=list)
+    hiring_level_fit: str = ""
+
+
 class SkillScore(BaseModel):
+    """Legacy format; use DimensionalScore for new reports."""
     score: float = Field(..., ge=0.0, le=10.0)
     evidence: str
 
 
 class BehavioralScore(BaseModel):
+    """Legacy format; use DimensionalScore for new reports."""
     score: float = Field(..., ge=0.0, le=10.0)
     evidence: str
 
@@ -166,13 +190,16 @@ class CandidateReportResponse(BaseModel):
     session_id: UUID
     candidate_name: str | None = None
     overall_score: float | None
-    skill_scores: dict[str, SkillScore]
-    behavioral_scores: dict[str, BehavioralScore]
+    skill_scores: dict[str, DimensionalScore]
+    behavioral_scores: dict[str, DimensionalScore]
     ai_summary: str | None
     strengths: list[str]
     concerns: list[str]
     recommendation: Recommendation | None
     confidence_score: float | None
+    experience_level_assessment: str | None = None
+    suggested_follow_up_areas: list[str] = Field(default_factory=list)
+    hiring_level_fit: str | None = None
     created_at: datetime
 
 
@@ -225,3 +252,43 @@ class UserResponse(BaseModel):
 
 class UpdateUserRoleRequest(BaseModel):
     role: UserRole
+
+
+# --- Behavior Analytics / Proctoring ---
+
+class BehaviorEventCreate(BaseModel):
+    event_type: str = Field(
+        ..., pattern="^(keystroke|paste|tab_switch|focus_loss|code_submit|idle)$"
+    )
+    timestamp: datetime | None = None
+    data: dict | None = None
+
+
+class BehaviorEventResponse(BaseModel):
+    id: UUID
+    session_id: UUID
+    event_type: str
+    timestamp: datetime
+    data: dict | None
+
+
+class BehaviorSummary(BaseModel):
+    total_keystrokes: int = 0
+    total_pastes: int = 0
+    total_paste_chars: int = 0
+    tab_switches: int = 0
+    total_away_time_ms: int = 0
+    focus_losses: int = 0
+    avg_typing_speed_wpm: float = 0.0
+    longest_idle_ms: int = 0
+    code_submissions: int = 0
+    integrity_score: float = 10.0
+    flags: list[str] = Field(default_factory=list)
+
+
+class IntegrityAssessment(BaseModel):
+    integrity_score: float
+    risk_level: str
+    flags: list[str]
+    summary: str
+    details: BehaviorSummary

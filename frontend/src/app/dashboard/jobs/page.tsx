@@ -13,6 +13,7 @@ import {
   Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type FormData = {
   title: string;
@@ -58,8 +59,8 @@ export default function JobsPage() {
     try {
       const res = await api.getJobPostings();
       setJobs(res.items);
-    } catch {
-      /* handled by interceptor */
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load jobs");
     } finally {
       setLoading(false);
     }
@@ -87,8 +88,8 @@ export default function JobsPage() {
       setForm({ ...defaultForm });
       setShowForm(false);
       await loadJobs();
-    } catch {
-      /* toast on error */
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create job");
     } finally {
       setSaving(false);
     }
@@ -97,12 +98,15 @@ export default function JobsPage() {
   async function handleGenerateLink(jobId: string) {
     try {
       const res = await api.generateInterviewLink(jobId);
-      const fullUrl = `${window.location.origin}/interview/${res.token}`;
+      const job = jobs.find((j) => j.id === jobId);
+      const formatSuffix =
+        job && job.interview_format !== "text" ? `/${job.interview_format}` : "";
+      const fullUrl = `${window.location.origin}/interview/${res.token}${formatSuffix}`;
       await navigator.clipboard.writeText(fullUrl);
       setCopiedToken(jobId);
       setTimeout(() => setCopiedToken(null), 2000);
-    } catch {
-      /* error */
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to generate link");
     }
   }
 
@@ -111,8 +115,8 @@ export default function JobsPage() {
     try {
       await api.extractSkills(jobId);
       await loadJobs();
-    } catch {
-      /* error */
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to extract skills");
     } finally {
       setExtracting(null);
     }
@@ -123,8 +127,8 @@ export default function JobsPage() {
     try {
       await api.deleteJobPosting(jobId);
       await loadJobs();
-    } catch {
-      /* error */
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete job");
     }
   }
 
@@ -163,10 +167,11 @@ export default function JobsPage() {
         >
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="job-title" className="block text-sm font-medium text-slate-700 mb-1">
                 Job Title
               </label>
               <input
+                id="job-title"
                 type="text"
                 required
                 minLength={3}
@@ -177,10 +182,11 @@ export default function JobsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="role-type" className="block text-sm font-medium text-slate-700 mb-1">
                 Role Type
               </label>
               <select
+                id="role-type"
                 value={form.role_type}
                 onChange={(e) => setForm({ ...form, role_type: e.target.value })}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
@@ -193,10 +199,11 @@ export default function JobsPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="job-description" className="block text-sm font-medium text-slate-700 mb-1">
               Job Description
             </label>
             <textarea
+              id="job-description"
               required
               minLength={50}
               rows={5}
@@ -211,10 +218,11 @@ export default function JobsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="required-skills" className="block text-sm font-medium text-slate-700 mb-1">
                 Required Skills (comma-separated)
               </label>
               <input
+                id="required-skills"
                 type="text"
                 value={form.required_skills}
                 onChange={(e) =>
@@ -225,10 +233,11 @@ export default function JobsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="interview-format" className="block text-sm font-medium text-slate-700 mb-1">
                 Interview Format
               </label>
               <select
+                id="interview-format"
                 value={form.interview_format}
                 onChange={(e) =>
                   setForm({ ...form, interview_format: e.target.value })
@@ -244,10 +253,11 @@ export default function JobsPage() {
 
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="num-questions" className="block text-sm font-medium text-slate-700 mb-1">
                 Questions
               </label>
               <input
+                id="num-questions"
                 type="number"
                 min={3}
                 max={30}
@@ -265,10 +275,11 @@ export default function JobsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="duration-minutes" className="block text-sm font-medium text-slate-700 mb-1">
                 Duration (min)
               </label>
               <input
+                id="duration-minutes"
                 type="number"
                 min={10}
                 max={120}
@@ -286,10 +297,11 @@ export default function JobsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="difficulty" className="block text-sm font-medium text-slate-700 mb-1">
                 Difficulty
               </label>
               <select
+                id="difficulty"
                 value={form.interview_config.difficulty}
                 onChange={(e) =>
                   setForm({

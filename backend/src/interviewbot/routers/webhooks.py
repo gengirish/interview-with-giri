@@ -1,5 +1,8 @@
 """Outbound webhook system for notifying external systems about interview events."""
 
+import hashlib
+import hmac
+import json
 from uuid import UUID
 
 import httpx
@@ -85,14 +88,26 @@ async def dispatch_webhook(org_id: str, event_type: str, payload: dict, db: Asyn
             continue
 
         try:
+            body = {
+                "event": event_type,
+                "data": payload,
+            }
+            payload_json = json.dumps(body, separators=(",", ":"), sort_keys=True)
+            secret = wh.get("secret", "")
+            signature = (
+                hmac.new(secret.encode("utf-8"), payload_json.encode("utf-8"), hashlib.sha256).hexdigest()
+                if secret
+                else ""
+            )
+
             async with httpx.AsyncClient(timeout=10.0) as client:
                 await client.post(
                     url,
-                    json={
-                        "event": event_type,
-                        "data": payload,
+                    content=payload_json,
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Webhook-Signature": signature,
                     },
-                    headers={"Content-Type": "application/json"},
                 )
             logger.info("webhook_dispatched", url=url, event=event_type)
         except Exception as e:

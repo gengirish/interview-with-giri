@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { toast } from "sonner";
 
 const statusConfig: Record<
   string,
@@ -61,8 +62,8 @@ export default function InterviewsPage() {
       );
       setSessions(res.items);
       setTotal(res.total);
-    } catch {
-      /* error */
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load interviews");
     } finally {
       setLoading(false);
     }

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -120,6 +120,23 @@ class InterviewSession(Base):
     report = relationship(
         "CandidateReport", back_populates="session", uselist=False, cascade="all, delete-orphan"
     )
+    behavior_events = relationship(
+        "BehaviorEvent", back_populates="session", cascade="all, delete-orphan"
+    )
+
+
+class BehaviorEvent(Base):
+    __tablename__ = "behavior_event"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id = Column(
+        UUID(as_uuid=True), ForeignKey("interview_session.id"), nullable=False, index=True
+    )
+    event_type = Column(String(50), nullable=False)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    data = Column(JSONB, nullable=True)
+
+    session = relationship("InterviewSession", back_populates="behavior_events")
 
 
 class InterviewMessage(Base):
@@ -149,6 +166,7 @@ class CandidateReport(Base):
     concerns = Column(JSONB, default=list)
     recommendation = Column(String(50))
     confidence_score = Column(Numeric(3, 2))
+    extended_data = Column(JSONB, default=dict)
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
     session = relationship("InterviewSession", back_populates="report")

@@ -127,10 +127,11 @@ export default function TeamPage() {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="team-full-name" className="block text-sm font-medium text-slate-700 mb-1">
                 Full Name
               </label>
               <input
+                id="team-full-name"
                 type="text"
                 required
                 minLength={2}
@@ -143,10 +144,11 @@ export default function TeamPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="team-email" className="block text-sm font-medium text-slate-700 mb-1">
                 Email
               </label>
               <input
+                id="team-email"
                 type="email"
                 required
                 value={inviteForm.email}
@@ -158,10 +160,11 @@ export default function TeamPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="team-password" className="block text-sm font-medium text-slate-700 mb-1">
                 Temporary Password
               </label>
               <input
+                id="team-password"
                 type="password"
                 required
                 minLength={8}
@@ -174,10 +177,11 @@ export default function TeamPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="team-role" className="block text-sm font-medium text-slate-700 mb-1">
                 Role
               </label>
               <select
+                id="team-role"
                 value={inviteForm.role}
                 onChange={(e) =>
                   setInviteForm({ ...inviteForm, role: e.target.value })
@@ -259,6 +263,7 @@ export default function TeamPage() {
                     onClick={() => handleToggleActive(u.id)}
                     className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                     title={u.is_active ? "Deactivate" : "Activate"}
+                    aria-label={u.is_active ? "Deactivate user" : "Activate user"}
                   >
                     {u.is_active ? (
                       <UserX className="h-4 w-4" />

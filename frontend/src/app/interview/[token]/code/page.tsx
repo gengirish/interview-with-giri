@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
+import type { BehaviorEvent } from "@/lib/api";
 import {
   Send,
   Loader2,
@@ -15,8 +16,15 @@ import {
 import { cn } from "@/lib/utils";
 import { CodeEditor } from "@/components/code-editor";
 
+const BATCH_INTERVAL_MS = 10_000;
+const IDLE_THRESHOLD_MS = 30_000;
+
 type Phase = "loading" | "consent" | "ready" | "interview" | "completed" | "error";
-type ChatMessage = { role: "interviewer" | "candidate"; content: string };
+type ChatMessage = {
+  role: "interviewer" | "candidate";
+  content: string;
+  isCodeReview?: boolean;
+};
 
 export default function CodeInterviewPage() {
   const { token } = useParams<{ token: string }>();
@@ -32,10 +40,34 @@ export default function CodeInterviewPage() {
   const [total, setTotal] = useState(10);
   const [elapsed, setElapsed] = useState(0);
   const [activeTab, setActiveTab] = useState<"chat" | "code">("chat");
+  const [chatPulse, setChatPulse] = useState(false);
+  const [lastMessageWasCodeSubmit, setLastMessageWasCodeSubmit] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const behaviorBufferRef = useRef<BehaviorEvent[]>([]);
+  const batchIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const idleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevActiveTabRef = useRef<"chat" | "code">("chat");
+  const tokenRef = useRef(token);
+
+  tokenRef.current = token;
+
+  const flushBehaviorEvents = useCallback(async () => {
+    const events = behaviorBufferRef.current;
+    if (events.length === 0 || !tokenRef.current) return;
+    behaviorBufferRef.current = [];
+    try {
+      await api.submitBehaviorEvents(tokenRef.current, events);
+    } catch {
+      behaviorBufferRef.current = [...events];
+    }
+  }, []);
+
+  const pushBehaviorEvent = useCallback((event: BehaviorEvent) => {
+    behaviorBufferRef.current.push(event);
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -59,6 +91,78 @@ export default function CodeInterviewPage() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, thinking]);
+
+  useEffect(() => {
+    if (phase !== "interview") return;
+    batchIntervalRef.current = setInterval(
+      flushBehaviorEvents,
+      BATCH_INTERVAL_MS
+    );
+    return () => {
+      if (batchIntervalRef.current) {
+        clearInterval(batchIntervalRef.current);
+        batchIntervalRef.current = null;
+      }
+    };
+  }, [phase, flushBehaviorEvents]);
+
+  useEffect(() => {
+    if (phase !== "interview") return;
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        pushBehaviorEvent({
+          event_type: "focus_loss",
+          timestamp: new Date().toISOString(),
+        });
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [phase, pushBehaviorEvent]);
+
+  useEffect(() => {
+    if (phase !== "interview") return;
+    const resetIdleTimer = () => {
+      if (idleTimeoutRef.current) {
+        clearTimeout(idleTimeoutRef.current);
+        idleTimeoutRef.current = null;
+      }
+      idleTimeoutRef.current = setTimeout(() => {
+        pushBehaviorEvent({
+          event_type: "idle",
+          timestamp: new Date().toISOString(),
+          data: { duration_ms: IDLE_THRESHOLD_MS },
+        });
+        idleTimeoutRef.current = null;
+      }, IDLE_THRESHOLD_MS);
+    };
+    resetIdleTimer();
+    const events = ["keydown", "mousedown", "scroll", "click"];
+    events.forEach((e) => document.addEventListener(e, resetIdleTimer));
+    return () => {
+      events.forEach((e) => document.removeEventListener(e, resetIdleTimer));
+      if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current);
+    };
+  }, [phase, pushBehaviorEvent]);
+
+  useEffect(() => {
+    if (phase !== "interview") return;
+    if (prevActiveTabRef.current !== activeTab) {
+      pushBehaviorEvent({
+        event_type: "tab_switch",
+        timestamp: new Date().toISOString(),
+        data: { from: prevActiveTabRef.current, to: activeTab },
+      });
+      prevActiveTabRef.current = activeTab;
+    }
+  }, [phase, activeTab, pushBehaviorEvent]);
+
+  useEffect(() => {
+    if (phase === "completed") {
+      flushBehaviorEvents();
+    }
+  }, [phase, flushBehaviorEvents]);
 
   async function handleConsent(e: React.FormEvent) {
     e.preventDefault();
@@ -87,8 +191,18 @@ export default function CodeInterviewPage() {
       if (data.type === "question") {
         setMessages((m) => [...m, { role: "interviewer", content: data.content }]);
         setThinking(false);
-        setProgress(data.progress || 0);
-        setTotal(data.total || 10);
+        setLastMessageWasCodeSubmit(false);
+        setProgress(data.progress ?? 0);
+        setTotal(data.total ?? 10);
+      } else if (data.type === "code_review") {
+        setMessages((m) => [
+          ...m,
+          { role: "interviewer", content: data.content, isCodeReview: true },
+        ]);
+        setThinking(false);
+        setLastMessageWasCodeSubmit(false);
+        setChatPulse(true);
+        setTimeout(() => setChatPulse(false), 1500);
       } else if (data.type === "thinking") {
         setThinking(true);
       } else if (data.type === "end") {
@@ -131,8 +245,15 @@ export default function CodeInterviewPage() {
     const msg = `[Code Submission]\n\`\`\`\n${code}\n\`\`\``;
     setMessages((m) => [...m, { role: "candidate", content: msg }]);
     wsRef.current.send(JSON.stringify({ type: "message", content: msg }));
+    setLastMessageWasCodeSubmit(true);
     setActiveTab("chat");
+    setChatPulse(true);
+    setTimeout(() => setChatPulse(false), 1500);
   }
+
+  const handleBehaviorEvent = useCallback((event: BehaviorEvent) => {
+    behaviorBufferRef.current.push(event);
+  }, []);
 
   function formatTime(s: number): string {
     const m = Math.floor(s / 60);
@@ -240,9 +361,142 @@ export default function CodeInterviewPage() {
       </div>
     );
 
+  const lastMsgIsCodeSubmit =
+    lastMessageWasCodeSubmit &&
+    messages.length > 0 &&
+    messages[messages.length - 1]?.role === "candidate" &&
+    messages[messages.length - 1]?.content.includes("[Code Submission]");
+
+  const renderChatMessage = (msg: ChatMessage) => {
+    const isCodeBlock = msg.content.includes("```");
+    return (
+      <div
+        className={cn(
+          "flex",
+          msg.role === "candidate" ? "justify-end" : "justify-start",
+        )}
+      >
+        <div
+          className={cn(
+            "max-w-[80%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap",
+            msg.role === "candidate"
+              ? "bg-indigo-600 text-white rounded-br-sm"
+              : "bg-slate-800 text-slate-200 rounded-bl-sm",
+            msg.isCodeReview &&
+              "border-l-2 border-indigo-400",
+          )}
+        >
+          {msg.isCodeReview && (
+            <span className="mb-2 block text-xs font-medium text-indigo-400">
+              Code Review
+            </span>
+          )}
+          {isCodeBlock ? (
+            <pre className="overflow-x-auto text-left font-mono text-xs">
+              {msg.content}
+            </pre>
+          ) : (
+            msg.content
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const chatPanel = (
+    <div
+      className={cn(
+        "flex h-full flex-col border-r border-slate-800",
+        chatPulse && "animate-pulse",
+      )}
+    >
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+        <div className="max-w-full space-y-4 lg:max-w-none">
+          {messages.map((msg, i) => (
+            <div key={i}>{renderChatMessage(msg)}</div>
+          ))}
+          {thinking && (
+            <div className="flex justify-start">
+              <div className="rounded-2xl bg-slate-800 px-4 py-3 rounded-bl-sm">
+                {lastMsgIsCodeSubmit ? (
+                  <div className="flex items-center gap-2 text-sm text-slate-400">
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-2 w-2 rounded-full bg-slate-500 animate-bounce" />
+                      <div
+                        className="h-2 w-2 rounded-full bg-slate-500 animate-bounce"
+                        style={{ animationDelay: "150ms" }}
+                      />
+                      <div
+                        className="h-2 w-2 rounded-full bg-slate-500 animate-bounce"
+                        style={{ animationDelay: "300ms" }}
+                      />
+                    </div>
+                    AI is reviewing your code...
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-2 w-2 rounded-full bg-slate-500 animate-bounce" />
+                    <div
+                      className="h-2 w-2 rounded-full bg-slate-500 animate-bounce"
+                      style={{ animationDelay: "150ms" }}
+                    />
+                    <div
+                      className="h-2 w-2 rounded-full bg-slate-500 animate-bounce"
+                      style={{ animationDelay: "300ms" }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          <div ref={chatEndRef} />
+        </div>
+      </div>
+
+      <div className="shrink-0 border-t border-slate-800 px-4 py-4">
+        <form
+          onSubmit={sendMessage}
+          className="flex items-center gap-3"
+        >
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            disabled={thinking}
+            placeholder={
+              thinking
+                ? "Waiting..."
+                : "Type your answer or explain your code..."
+            }
+            className="flex-1 rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-indigo-500 outline-none disabled:opacity-50"
+            autoFocus
+          />
+          <button
+            type="submit"
+            disabled={thinking || !input.trim()}
+            className="rounded-xl bg-indigo-600 p-3 text-white hover:bg-indigo-700 disabled:opacity-50"
+          >
+            <Send className="h-5 w-5" />
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+
+  const codePanel = (
+    <div className="flex h-full min-h-0 flex-col p-4">
+      <CodeEditor
+        interviewToken={token}
+        onSubmitCode={handleCodeSubmit}
+        onBehaviorEvent={handleBehaviorEvent}
+        className="h-full min-h-0 flex-1"
+      />
+    </div>
+  );
+
   return (
     <div className="flex h-screen flex-col bg-slate-950">
-      <header className="flex items-center justify-between border-b border-slate-800 px-4 py-2">
+      <header className="flex shrink-0 items-center justify-between border-b border-slate-800 px-4 py-2">
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center">
             <Code2 className="h-4 w-4 text-white" />
@@ -250,7 +504,7 @@ export default function CodeInterviewPage() {
           <h1 className="text-sm font-semibold text-white">{jobTitle}</h1>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex rounded-lg border border-slate-700 overflow-hidden">
+          <div className="flex lg:hidden rounded-lg border border-slate-700 overflow-hidden">
             <button
               onClick={() => setActiveTab("chat")}
               className={cn(
@@ -286,85 +540,32 @@ export default function CodeInterviewPage() {
         </div>
       </header>
 
-      <div className="h-1 bg-slate-800">
+      <div className="h-1 w-full bg-slate-800">
         <div
           className="h-full bg-indigo-600 transition-all duration-500"
           style={{ width: `${(progress / total) * 100}%` }}
         />
       </div>
 
-      <div className="flex-1 overflow-hidden">
-        {activeTab === "chat" ? (
-          <div className="flex h-full flex-col">
-            <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-              <div className="max-w-3xl mx-auto space-y-4">
-                {messages.map((msg, i) => (
-                  <div
-                    key={i}
-                    className={cn(
-                      "flex",
-                      msg.role === "candidate" ? "justify-end" : "justify-start",
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "max-w-[80%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap",
-                        msg.role === "candidate"
-                          ? "bg-indigo-600 text-white rounded-br-sm"
-                          : "bg-slate-800 text-slate-200 rounded-bl-sm",
-                      )}
-                    >
-                      {msg.content}
-                    </div>
-                  </div>
-                ))}
-                {thinking && (
-                  <div className="flex justify-start">
-                    <div className="rounded-2xl bg-slate-800 px-4 py-3 rounded-bl-sm">
-                      <div className="flex items-center gap-1.5">
-                        <div className="h-2 w-2 rounded-full bg-slate-500 animate-bounce" />
-                        <div className="h-2 w-2 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: "150ms" }} />
-                        <div className="h-2 w-2 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: "300ms" }} />
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <div ref={chatEndRef} />
-              </div>
-            </div>
-
-            <div className="border-t border-slate-800 px-4 py-4">
-              <form
-                onSubmit={sendMessage}
-                className="max-w-3xl mx-auto flex items-center gap-3"
-              >
-                <input
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  disabled={thinking}
-                  placeholder={thinking ? "Waiting..." : "Type your answer or explain your code..."}
-                  className="flex-1 rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-indigo-500 outline-none disabled:opacity-50"
-                  autoFocus
-                />
-                <button
-                  type="submit"
-                  disabled={thinking || !input.trim()}
-                  className="rounded-xl bg-indigo-600 p-3 text-white hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  <Send className="h-5 w-5" />
-                </button>
-              </form>
-            </div>
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="grid grid-cols-1 lg:grid-cols-[40%_1fr] h-full">
+          <div
+            className={cn(
+              "min-w-0 overflow-hidden",
+              activeTab !== "chat" && "hidden lg:block",
+            )}
+          >
+            {chatPanel}
           </div>
-        ) : (
-          <div className="h-full p-4">
-            <CodeEditor
-              onSubmit={(code) => handleCodeSubmit(code)}
-              className="h-full"
-            />
+          <div
+            className={cn(
+              "min-w-0 overflow-hidden",
+              activeTab !== "code" && "hidden lg:block",
+            )}
+          >
+            {codePanel}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

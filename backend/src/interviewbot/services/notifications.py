@@ -1,5 +1,6 @@
 """Email notification service for interview events."""
 
+import asyncio
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -120,11 +121,14 @@ async def _send_email(to_email: str, subject: str, html: str) -> bool:
         msg["To"] = to_email
         msg.attach(MIMEText(html, "html"))
 
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
-            server.starttls()
-            if smtp_user:
-                server.login(smtp_user, smtp_password)
-            server.sendmail(from_email, [to_email], msg.as_string())
+        def _send_sync() -> None:
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                server.starttls()
+                if smtp_user:
+                    server.login(smtp_user, smtp_password)
+                server.sendmail(from_email, [to_email], msg.as_string())
+
+        await asyncio.to_thread(_send_sync)
 
         logger.info("email_sent", to=to_email, subject=subject)
         return True

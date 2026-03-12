@@ -3,6 +3,8 @@ import pytest
 
 from tests.conftest import JOB_PAYLOAD, SIGNUP_PAYLOAD
 
+pytestmark = pytest.mark.smoke
+
 
 async def _setup_job_with_link(client):
     """Signup, create job, generate link. Returns (headers, job_id, token)."""

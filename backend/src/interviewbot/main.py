@@ -18,6 +18,7 @@ from interviewbot.routers import (
     health,
     interviews,
     job_postings,
+    proctoring,
     reports,
     users,
     webhooks,
@@ -63,7 +64,8 @@ def create_app() -> FastAPI:
             error=str(exc),
             traceback=traceback.format_exc(),
         )
-        return JSONResponse(status_code=500, content={"detail": str(exc)})
+        detail = str(exc) if settings.app_env == "dev" else "An internal error occurred"
+        return JSONResponse(status_code=500, content={"detail": detail})
 
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(auth.router, prefix="/api/v1")
@@ -73,6 +75,7 @@ def create_app() -> FastAPI:
     app.include_router(code_execution.router, prefix="/api/v1")
     app.include_router(reports.router, prefix="/api/v1")
     app.include_router(analytics.router, prefix="/api/v1")
+    app.include_router(proctoring.router, prefix="/api/v1")
     app.include_router(billing.router, prefix="/api/v1")
     app.include_router(users.router, prefix="/api/v1")
     app.include_router(webhooks.router, prefix="/api/v1")

@@ -4,30 +4,121 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   api,
+  ApiError,
   type InterviewSession,
   type InterviewMessage,
   type CandidateReport,
 } from "@/lib/api";
+import type { IntegrityAssessment } from "@/types";
 import {
   Loader2,
   FileText,
   Award,
   AlertTriangle,
-  ThumbsUp,
   ArrowLeft,
   Sparkles,
+  Shield,
+  MessageSquare,
+  Code2,
+  Cpu,
+  Lock,
+  TestTube,
+  Mic,
+  LayoutGrid,
+  Check,
+  X,
+  ClipboardList,
+  Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { toast } from "sonner";
+import {
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
+
+const TECHNICAL_DIMENSION_KEYS = [
+  "code_quality",
+  "problem_solving",
+  "system_design",
+  "security_awareness",
+  "testing_instinct",
+  "technical_communication",
+] as const;
+
+const TECHNICAL_DIMENSION_LABELS: Record<string, string> = {
+  code_quality: "Code Quality",
+  problem_solving: "Problem Solving",
+  system_design: "System Design",
+  security_awareness: "Security",
+  testing_instinct: "Testing",
+  technical_communication: "Communication",
+};
+
+const FLAG_DESCRIPTIONS: Record<string, string> = {
+  excessive_pasting: "Candidate pasted code frequently, suggesting external assistance",
+  large_paste_content: "Large blocks of code were pasted rather than typed",
+  frequent_tab_switches: "Candidate switched away from the interview tab multiple times",
+  extended_away_time: "Significant time spent outside the interview window",
+  long_idle_period: "Extended period of inactivity during the interview",
+  no_typing_detected: "Code was submitted but no typing activity was recorded",
+};
+
+interface ScoreEntry {
+  score: number | null;
+  evidence: string;
+  notes?: string;
+}
+
+function getScore(report: CandidateReport, key: string): ScoreEntry | undefined {
+  const skill = report.skill_scores[key];
+  const behavioral = report.behavioral_scores[key];
+  const entry = skill ?? behavioral;
+  if (!entry) return undefined;
+  return {
+    score: entry.score,
+    evidence: entry.evidence,
+    notes: "notes" in entry ? (entry as { notes?: string }).notes : undefined,
+  };
+}
+
+function getAllDimensions(report: CandidateReport) {
+  const technical: Record<string, ScoreEntry> = {};
+  const behavioral: Record<string, ScoreEntry> = {};
+  for (const [k, v] of Object.entries(report.skill_scores)) {
+    technical[k] = {
+      score: v.score,
+      evidence: v.evidence,
+      notes: "notes" in v ? (v as { notes?: string }).notes : undefined,
+    };
+  }
+  for (const [k, v] of Object.entries(report.behavioral_scores)) {
+    behavioral[k] = {
+      score: v.score,
+      evidence: v.evidence,
+      notes: "notes" in v ? (v as { notes?: string }).notes : undefined,
+    };
+  }
+  return { technical, behavioral };
+}
 
 export default function InterviewDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [session, setSession] = useState<InterviewSession | null>(null);
   const [messages, setMessages] = useState<InterviewMessage[]>([]);
   const [report, setReport] = useState<CandidateReport | null>(null);
+  const [integrity, setIntegrity] = useState<IntegrityAssessment | null | "none">(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [activeTab, setActiveTab] = useState<"report" | "transcript">("report");
+  const [activeTab, setActiveTab] = useState<"scorecard" | "integrity" | "transcript">(
+    "scorecard",
+  );
 
   useEffect(() => {
     async function load() {
@@ -42,11 +133,24 @@ export default function InterviewDetailPage() {
         try {
           const r = await api.getReport(id);
           setReport(r);
-        } catch {
-          // report may not exist yet
+        } catch (err) {
+          if (!(err instanceof ApiError && err.status === 404)) {
+            toast.error(err instanceof Error ? err.message : "Failed to load report");
+          }
         }
-      } catch {
-        // error
+
+        try {
+          const assessment = await api.getIntegrityAssessment(id);
+          setIntegrity(assessment);
+        } catch (err) {
+          if (err instanceof ApiError && err.status === 404) {
+            setIntegrity("none");
+          } else {
+            setIntegrity("none");
+          }
+        }
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to load interview details");
       } finally {
         setLoading(false);
       }
@@ -59,8 +163,8 @@ export default function InterviewDetailPage() {
     try {
       const r = await api.generateReport(id);
       setReport(r);
-    } catch {
-      // error
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to generate report");
     } finally {
       setGenerating(false);
     }
@@ -73,22 +177,81 @@ export default function InterviewDetailPage() {
     return `${m}m ${s}s`;
   }
 
+  function formatDate(dateStr: string | null): string {
+    if (!dateStr) return "--";
+    return new Date(dateStr).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  }
+
+  function scoreColor(score: number): string {
+    if (score >= 7) return "text-emerald-600";
+    if (score >= 5) return "text-amber-600";
+    return "text-red-600";
+  }
+
+  function scoreBarColor(score: number): string {
+    if (score >= 7) return "bg-emerald-500";
+    if (score >= 5) return "bg-amber-500";
+    return "bg-red-500";
+  }
+
   function recommendationStyle(rec: string | null) {
     if (!rec) return "bg-slate-100 text-slate-600";
-    if (rec === "strong_hire") return "bg-green-100 text-green-800";
-    if (rec === "hire") return "bg-blue-100 text-blue-800";
-    return "bg-red-100 text-red-800";
+    if (rec === "strong_hire") return "bg-emerald-100 text-emerald-800";
+    if (rec === "hire") return "bg-emerald-100 text-emerald-700";
+    if (rec === "lean_no_hire") return "bg-amber-100 text-amber-800";
+    if (rec === "no_hire") return "bg-red-100 text-red-800";
+    return "bg-slate-100 text-slate-600";
   }
 
   function recommendationLabel(rec: string | null) {
     if (!rec) return "Pending";
-    return rec.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    const labels: Record<string, string> = {
+      strong_hire: "Strong Hire",
+      hire: "Hire",
+      lean_no_hire: "Lean No Hire",
+      no_hire: "No Hire",
+    };
+    return labels[rec] ?? rec.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   }
+
+
+  function integrityBadgeColor(score: number): string {
+    if (score >= 8) return "bg-emerald-100 text-emerald-800";
+    if (score >= 5) return "bg-amber-100 text-amber-800";
+    return "bg-red-100 text-red-800";
+  }
+
+  function riskLevelStyle(level: string): string {
+    if (level === "low") return "bg-emerald-100 text-emerald-800";
+    if (level === "medium") return "bg-amber-100 text-amber-800";
+    return "bg-red-100 text-red-800";
+  }
+
+  const overallScore = report?.overall_score ?? session?.overall_score ?? null;
+  const hasDimensionalData =
+    report &&
+    (Object.keys(report.skill_scores).length > 0 || Object.keys(report.behavioral_scores).length > 0);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <div className="h-10 w-10 animate-pulse rounded-lg bg-slate-200" />
+          <div className="flex-1 space-y-2">
+            <div className="h-6 w-48 animate-pulse rounded bg-slate-200" />
+            <div className="h-4 w-64 animate-pulse rounded bg-slate-200" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-48 animate-pulse rounded-xl bg-slate-200" />
+          ))}
+        </div>
+        <div className="h-80 animate-pulse rounded-xl bg-slate-200" />
       </div>
     );
   }
@@ -97,32 +260,102 @@ export default function InterviewDetailPage() {
     return <div className="text-slate-500">Interview not found.</div>;
   }
 
+  const radarData = hasDimensionalData && report
+    ? (() => {
+        const dims = new Map<string, { technical: number; behavioral: number }>();
+        for (const key of TECHNICAL_DIMENSION_KEYS) {
+          const entry = getScore(report, key) ?? report.skill_scores[key];
+          const score = entry && "score" in entry ? (entry as ScoreEntry).score : null;
+          const label =
+            TECHNICAL_DIMENSION_LABELS[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+          dims.set(label, {
+            technical: score ?? 0,
+            behavioral: 0,
+          });
+        }
+        for (const [key, entry] of Object.entries(report.behavioral_scores)) {
+          const label =
+            TECHNICAL_DIMENSION_LABELS[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+          const existing = dims.get(label);
+          const score = entry?.score ?? 0;
+          if (existing) {
+            existing.behavioral = score;
+          } else {
+            dims.set(label, { technical: 0, behavioral: score });
+          }
+        }
+        return Array.from(dims.entries()).map(([dimension, { technical, behavioral }]) => ({
+          dimension,
+          technical,
+          behavioral,
+          fullMark: 10,
+        }));
+      })()
+    : [];
+
+  const { technical, behavioral } = report ? getAllDimensions(report) : { technical: {}, behavioral: {} };
+  const allDimensionEntries = [
+    ...Object.entries(technical).map(([k, v]) => ({ key: k, ...v, type: "technical" as const })),
+    ...Object.entries(behavioral).map(([k, v]) => ({ key: k, ...v, type: "behavioral" as const })),
+  ];
+
+  const dimensionIcons: Record<string, React.ReactNode> = {
+    code_quality: <Code2 className="h-4 w-4" />,
+    problem_solving: <Cpu className="h-4 w-4" />,
+    system_design: <LayoutGrid className="h-4 w-4" />,
+    security_awareness: <Lock className="h-4 w-4" />,
+    testing_instinct: <TestTube className="h-4 w-4" />,
+    technical_communication: <Mic className="h-4 w-4" />,
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link
-          href="/dashboard/interviews"
-          className="rounded-lg border border-slate-200 p-2 hover:bg-slate-50 transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4 text-slate-600" />
-        </Link>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold text-slate-900">
-            {session.candidate_name || "Unknown Candidate"}
-          </h1>
-          <p className="text-sm text-slate-500">
-            {session.candidate_email} &middot; {session.format} &middot;{" "}
-            {formatDuration(session.duration_seconds)}
-          </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-4">
+          <Link
+            href="/dashboard/interviews"
+            className="rounded-lg border border-slate-200 p-2 hover:bg-slate-50 transition-colors"
+            aria-label="Back to interviews"
+          >
+            <ArrowLeft className="h-4 w-4 text-slate-600" />
+          </Link>
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">
+              {session.candidate_name || "Unknown Candidate"}
+            </h1>
+            <p className="text-sm text-slate-500">
+              {session.candidate_email} &middot; {formatDate(session.started_at ?? session.created_at)}{" "}
+              &middot; {formatDuration(session.duration_seconds)}
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          {session.overall_score != null && (
-            <div className="text-right">
-              <span className="text-2xl font-bold text-slate-900">
-                {session.overall_score.toFixed(1)}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Overall score gauge */}
+          {overallScore != null && (
+            <div className="relative flex h-16 w-16 items-center justify-center">
+              <svg className="h-16 w-16 -rotate-90" viewBox="0 0 36 36">
+                <path
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  className="text-slate-200"
+                />
+                <path
+                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  fill="none"
+                  strokeWidth="2.5"
+                  strokeDasharray={`${(overallScore / 10) * 100}, 100`}
+                  strokeLinecap="round"
+                  className={cn(
+                    overallScore >= 7 ? "text-emerald-500" : overallScore >= 5 ? "text-amber-500" : "text-red-500",
+                  )}
+                />
+              </svg>
+              <span className="absolute text-lg font-bold text-slate-900">
+                {overallScore.toFixed(1)}
               </span>
-              <span className="text-sm text-slate-500">/10</span>
             </div>
           )}
           {report && (
@@ -135,261 +368,430 @@ export default function InterviewDetailPage() {
               {recommendationLabel(report.recommendation)}
             </span>
           )}
+          {report?.confidence_score != null && (
+            <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5">
+              <span className="text-xs text-slate-500">Confidence</span>
+              <span className="text-sm font-medium text-slate-700">
+                {(report.confidence_score * 100).toFixed(0)}%
+              </span>
+            </div>
+          )}
+          {integrity && integrity !== "none" && (
+            <div
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg px-2.5 py-1.5",
+                integrityBadgeColor(integrity.integrity_score),
+              )}
+            >
+              <Shield className="h-4 w-4" />
+              <span className="text-sm font-medium">
+                Integrity {integrity.integrity_score.toFixed(1)}/10
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Tab buttons */}
-      <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
+      {/* Tabs */}
+      <div className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1">
         <button
-          onClick={() => setActiveTab("report")}
+          onClick={() => setActiveTab("scorecard")}
           className={cn(
-            "flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors",
-            activeTab === "report"
+            "flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+            activeTab === "scorecard"
               ? "bg-white text-slate-900 shadow-sm"
               : "text-slate-600 hover:text-slate-900",
           )}
         >
-          <FileText className="inline h-4 w-4 mr-1.5" />
-          Report
+          <Award className="h-4 w-4" />
+          Scorecard
+        </button>
+        <button
+          onClick={() => setActiveTab("integrity")}
+          className={cn(
+            "flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+            activeTab === "integrity"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-600 hover:text-slate-900",
+          )}
+        >
+          <Shield className="h-4 w-4" />
+          Integrity
         </button>
         <button
           onClick={() => setActiveTab("transcript")}
           className={cn(
-            "flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+            "flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors",
             activeTab === "transcript"
               ? "bg-white text-slate-900 shadow-sm"
               : "text-slate-600 hover:text-slate-900",
           )}
         >
-          <FileText className="inline h-4 w-4 mr-1.5" />
+          <MessageSquare className="h-4 w-4" />
           Transcript ({messages.length})
         </button>
       </div>
 
-      {activeTab === "report" ? (
-        report ? (
+      {/* Tab content */}
+      {activeTab === "scorecard" &&
+        (report ? (
           <div className="space-y-6">
-            {/* AI Summary */}
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-indigo-600" />
-                AI Summary
-              </h3>
-              <p className="mt-3 text-sm text-slate-700 leading-relaxed">
-                {report.ai_summary}
-              </p>
-              {report.confidence_score != null && (
-                <div className="mt-3 flex items-center gap-2">
-                  <span className="text-xs text-slate-500">Confidence:</span>
-                  <div className="h-2 w-24 rounded-full bg-slate-100 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-indigo-500"
-                      style={{ width: `${report.confidence_score * 100}%` }}
-                    />
-                  </div>
-                  <span className="text-xs font-medium text-slate-700">
-                    {(report.confidence_score * 100).toFixed(0)}%
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Skill Scores */}
-            {Object.keys(report.skill_scores).length > 0 && (
+            {/* Radar Chart - only when we have dimensional data */}
+            {hasDimensionalData && radarData.length > 0 && (
               <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                  <Award className="h-4 w-4 text-indigo-600" />
-                  Technical Skills
+                <h3 className="mb-4 text-sm font-semibold text-slate-900">
+                  Dimensional Score Overview
                 </h3>
-                <div className="mt-4 space-y-4">
-                  {Object.entries(report.skill_scores).map(
-                    ([skill, data]) => (
-                      <div key={skill}>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium text-slate-700 capitalize">
-                            {skill.replace("_", " ")}
-                          </span>
-                          <span
-                            className={cn(
-                              "text-sm font-bold",
-                              data.score >= 7
-                                ? "text-green-600"
-                                : data.score >= 5
-                                  ? "text-amber-600"
-                                  : "text-red-600",
-                            )}
-                          >
-                            {data.score.toFixed(1)}
-                          </span>
-                        </div>
-                        <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-                          <div
-                            className={cn(
-                              "h-full rounded-full transition-all duration-500",
-                              data.score >= 7
-                                ? "bg-green-500"
-                                : data.score >= 5
-                                  ? "bg-amber-500"
-                                  : "bg-red-500",
-                            )}
-                            style={{ width: `${data.score * 10}%` }}
-                          />
-                        </div>
-                        <p className="mt-1 text-xs text-slate-500 italic">
-                          &ldquo;{data.evidence}&rdquo;
-                        </p>
-                      </div>
-                    ),
-                  )}
+                <div className="h-80 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart data={radarData}>
+                      <PolarGrid />
+                      <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 11 }} />
+                      <PolarRadiusAxis angle={30} domain={[0, 10]} />
+                      <Radar
+                        name="Technical"
+                        dataKey="technical"
+                        stroke="#6366f1"
+                        fill="#6366f1"
+                        fillOpacity={0.3}
+                        strokeWidth={2}
+                      />
+                      {radarData.some((d) => d.behavioral > 0) && (
+                        <Radar
+                          name="Behavioral"
+                          dataKey="behavioral"
+                          stroke="#10b981"
+                          fill="#10b981"
+                          fillOpacity={0.2}
+                          strokeWidth={2}
+                        />
+                      )}
+                      <Legend />
+                    </RadarChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
             )}
 
-            {/* Behavioral Scores */}
-            {Object.keys(report.behavioral_scores).length > 0 && (
-              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="text-sm font-semibold text-slate-900">
-                  Behavioral Assessment
-                </h3>
-                <div className="mt-4 space-y-4">
-                  {Object.entries(report.behavioral_scores).map(
-                    ([area, data]) => (
-                      <div key={area}>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium text-slate-700 capitalize">
-                            {area.replace("_", " ")}
-                          </span>
-                          <span
-                            className={cn(
-                              "text-sm font-bold",
-                              data.score >= 7
-                                ? "text-green-600"
-                                : data.score >= 5
-                                  ? "text-amber-600"
-                                  : "text-red-600",
-                            )}
-                          >
-                            {data.score.toFixed(1)}
-                          </span>
-                        </div>
-                        <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+            {/* Dimensional Breakdown Cards */}
+            {allDimensionEntries.length > 0 && (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {allDimensionEntries.map(({ key, score, evidence, notes, type }) => {
+                  const label =
+                    TECHNICAL_DIMENSION_LABELS[key] ??
+                    key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+                  const icon = dimensionIcons[key] ?? <Award className="h-4 w-4" />;
+                  const numScore = score ?? 0;
+                  return (
+                    <div
+                      key={`${type}-${key}`}
+                      className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-indigo-600">{icon}</span>
+                        <span className="text-sm font-semibold text-slate-900">{label}</span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className="h-2 flex-1 rounded-full bg-slate-100 overflow-hidden mr-2">
                           <div
-                            className={cn(
-                              "h-full rounded-full",
-                              data.score >= 7
-                                ? "bg-green-500"
-                                : data.score >= 5
-                                  ? "bg-amber-500"
-                                  : "bg-red-500",
-                            )}
-                            style={{ width: `${data.score * 10}%` }}
+                            className={cn("h-full rounded-full transition-all", scoreBarColor(numScore))}
+                            style={{ width: `${Math.min(100, (numScore / 10) * 100)}%` }}
                           />
                         </div>
-                        <p className="mt-1 text-xs text-slate-500 italic">
-                          &ldquo;{data.evidence}&rdquo;
-                        </p>
+                        <span className={cn("text-sm font-bold shrink-0", scoreColor(numScore))}>
+                          {numScore.toFixed(1)}
+                        </span>
                       </div>
-                    ),
-                  )}
-                </div>
+                      {evidence && (
+                        <blockquote className="mt-2 border-l-2 border-slate-200 pl-3 text-xs italic text-slate-600">
+                          &ldquo;{evidence}&rdquo;
+                        </blockquote>
+                      )}
+                      {notes && (
+                        <p className="mt-1 text-xs text-slate-500">{notes}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Executive Summary */}
+            {(report.ai_summary ?? report.summary) && (
+              <div className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-6 shadow-sm">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  <Sparkles className="h-4 w-4 text-indigo-600" />
+                  Executive Summary
+                </h3>
+                <p className="mt-3 text-sm text-slate-700 leading-relaxed">
+                  {report.ai_summary ?? report.summary}
+                </p>
+                {report.confidence_score != null && (
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="text-xs text-slate-500">Confidence:</span>
+                    <div className="h-2 w-24 rounded-full bg-slate-200 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-indigo-500"
+                        style={{ width: `${report.confidence_score * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-medium text-slate-700">
+                      {(report.confidence_score * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Strengths & Concerns */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="rounded-xl border border-green-200 bg-green-50/50 p-6">
-                <h3 className="text-sm font-semibold text-green-800 flex items-center gap-2">
-                  <ThumbsUp className="h-4 w-4" />
+              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-emerald-800">
+                  <Check className="h-4 w-4 text-emerald-500" />
                   Strengths
                 </h3>
                 <ul className="mt-3 space-y-2">
-                  {report.strengths.map((s, i) => (
-                    <li
-                      key={i}
-                      className="text-sm text-green-700 flex items-start gap-2"
-                    >
-                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-green-500 shrink-0" />
-                      {s}
-                    </li>
-                  ))}
+                  {report.strengths.length > 0 ? (
+                    report.strengths.map((s, i) => (
+                      <li
+                        key={i}
+                        className="flex items-start gap-2 text-sm text-slate-700"
+                      >
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                        {s}
+                      </li>
+                    ))
+                  ) : (
+                    <li className="text-sm text-slate-500">No strengths recorded.</li>
+                  )}
                 </ul>
               </div>
-              <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-6">
-                <h3 className="text-sm font-semibold text-amber-800 flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4" />
+              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-red-800">
+                  <X className="h-4 w-4 text-red-500" />
                   Concerns
                 </h3>
                 <ul className="mt-3 space-y-2">
-                  {report.concerns.map((c, i) => (
-                    <li
-                      key={i}
-                      className="text-sm text-amber-700 flex items-start gap-2"
-                    >
-                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
-                      {c}
-                    </li>
-                  ))}
+                  {report.concerns.length > 0 ? (
+                    report.concerns.map((c, i) => (
+                      <li
+                        key={i}
+                        className="flex items-start gap-2 text-sm text-slate-700"
+                      >
+                        <X className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+                        {c}
+                      </li>
+                    ))
+                  ) : (
+                    <li className="text-sm text-slate-500">No concerns recorded.</li>
+                  )}
                 </ul>
               </div>
             </div>
+
+            {/* Hiring Level Fit & Suggested Follow-up */}
+            {(report.hiring_level_fit || (report.suggested_follow_up_areas?.length ?? 0) > 0) && (
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                {report.hiring_level_fit && (
+                  <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                      <Target className="h-4 w-4 text-indigo-600" />
+                      Hiring Level Fit
+                    </h3>
+                    <p className="mt-2 text-sm text-slate-700">{report.hiring_level_fit}</p>
+                  </div>
+                )}
+                {(report.suggested_follow_up_areas?.length ?? 0) > 0 && (
+                  <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                      <ClipboardList className="h-4 w-4 text-indigo-600" />
+                      Suggested Follow-up Areas
+                    </h3>
+                    <ul className="mt-2 space-y-1">
+                      {report.suggested_follow_up_areas!.map((area, i) => (
+                        <li key={i} className="text-sm text-slate-700">
+                          &bull; {area}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Fallback: simple view when no dimensional data */}
+            {!hasDimensionalData && (
+              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-900">Summary</h3>
+                <p className="mt-2 text-sm text-slate-700">
+                  {report.ai_summary ?? report.summary ?? "No detailed breakdown available for this report."}
+                </p>
+              </div>
+            )}
           </div>
         ) : (
           <div className="rounded-xl border border-slate-200 bg-white p-12 text-center shadow-sm">
             <FileText className="mx-auto h-12 w-12 text-slate-300" />
-            <h3 className="mt-4 text-lg font-medium text-slate-900">
-              No report generated yet
-            </h3>
+            <h3 className="mt-4 text-lg font-medium text-slate-900">No report generated yet</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Generate an AI-powered report to get detailed scoring and
-              recommendations.
+              Generate an AI-powered report to get detailed scoring and recommendations.
             </p>
             <button
               onClick={handleGenerateReport}
-              disabled={
-                generating || session.status !== "completed"
-              }
+              disabled={generating || session.status !== "completed"}
               className="mt-4 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
             >
-              {generating && (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              )}
+              {generating && <Loader2 className="h-4 w-4 animate-spin" />}
               <Sparkles className="h-4 w-4" />
               Generate Report
             </button>
           </div>
+        ))}
+
+      {activeTab === "integrity" && (
+        integrity && integrity !== "none" ? (
+          <div className="space-y-6">
+            {/* Integrity score gauge */}
+            <div className="flex flex-col items-center gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:flex-row sm:justify-between">
+              <div className="relative flex h-24 w-24 items-center justify-center">
+                <svg className="h-24 w-24 -rotate-90" viewBox="0 0 36 36">
+                  <path
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    className="text-slate-200"
+                  />
+                  <path
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    fill="none"
+                    strokeWidth="2.5"
+                    strokeDasharray={`${(integrity.integrity_score / 10) * 100}, 100`}
+                    strokeLinecap="round"
+                    className={cn(
+                      integrity.integrity_score >= 8
+                        ? "text-emerald-500"
+                        : integrity.integrity_score >= 5
+                          ? "text-amber-500"
+                          : "text-red-500",
+                    )}
+                  />
+                </svg>
+                <span className="absolute text-2xl font-bold text-slate-900">
+                  {integrity.integrity_score.toFixed(1)}
+                </span>
+              </div>
+              <div className="text-center sm:text-left">
+                <span
+                  className={cn(
+                    "inline-block rounded-full px-3 py-1 text-sm font-medium capitalize",
+                    riskLevelStyle(integrity.risk_level),
+                  )}
+                >
+                  {integrity.risk_level} Risk
+                </span>
+                <p className="mt-2 text-sm text-slate-600">{integrity.summary}</p>
+              </div>
+            </div>
+
+            {/* Behavior stats grid */}
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {[
+                { label: "Total Keystrokes", value: String(integrity.details.total_keystrokes) },
+                { label: "Paste Events", value: String(integrity.details.total_pastes) },
+                {
+                  label: "Paste Chars",
+                  value: integrity.details.total_paste_chars.toLocaleString(),
+                },
+                { label: "Tab Switches", value: String(integrity.details.tab_switches) },
+                {
+                  label: "Total Away Time",
+                  value: `${(integrity.details.total_away_time_ms / 1000).toFixed(1)}s`,
+                },
+                { label: "Focus Losses", value: String(integrity.details.focus_losses) },
+                {
+                  label: "Longest Idle",
+                  value: `${(integrity.details.longest_idle_ms / 1000).toFixed(1)}s`,
+                },
+                { label: "Code Submissions", value: String(integrity.details.code_submissions) },
+                {
+                  label: "Avg Typing (WPM)",
+                  value: integrity.details.avg_typing_speed_wpm?.toFixed(1) ?? "—",
+                },
+              ].map(({ label, value }) => (
+                <div
+                  key={label}
+                  className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                >
+                  <p className="text-xs text-slate-500">{label}</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-900">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Flags */}
+            {integrity.flags.length > 0 && (
+              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  Behavioral Flags
+                </h3>
+                <ul className="mt-3 space-y-2">
+                  {integrity.flags.map((flag, i) => (
+                    <li
+                      key={i}
+                      className="flex items-start gap-2 rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2 text-sm text-slate-700"
+                    >
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                      {FLAG_DESCRIPTIONS[flag] ??
+                        flag.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-slate-200 bg-white p-12 text-center shadow-sm">
+            <Shield className="mx-auto h-12 w-12 text-slate-300" />
+            <h3 className="mt-4 text-lg font-medium text-slate-900">
+              No proctoring data available
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Integrity metrics are collected when candidates complete interviews with proctoring
+              enabled. This session has no recorded behavior data.
+            </p>
+          </div>
         )
-      ) : (
-        /* Transcript */
+      )}
+
+      {activeTab === "transcript" && (
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="divide-y divide-slate-100">
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                className={cn(
-                  "px-6 py-4",
-                  msg.role === "interviewer" ? "bg-slate-50" : "",
-                )}
+                className={cn("px-6 py-4", msg.role === "interviewer" ? "bg-slate-50/50" : "")}
               >
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
                   <span
                     className={cn(
                       "text-xs font-semibold uppercase tracking-wider",
-                      msg.role === "interviewer"
-                        ? "text-indigo-600"
-                        : "text-slate-600",
+                      msg.role === "interviewer" ? "text-indigo-600" : "text-slate-600",
                     )}
                   >
-                    {msg.role === "interviewer"
-                      ? "AI Interviewer"
-                      : "Candidate"}
+                    {msg.role === "interviewer" ? "AI Interviewer" : "Candidate"}
                   </span>
                   <span className="text-xs text-slate-400">
-                    {new Date(msg.created_at).toLocaleTimeString()}
+                    {new Date(msg.created_at).toLocaleString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
                   </span>
                 </div>
-                <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                  {msg.content}
-                </p>
+                <p className="text-sm text-slate-700 whitespace-pre-wrap">{msg.content}</p>
               </div>
             ))}
           </div>

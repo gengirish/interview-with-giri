@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends
+from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from interviewbot.config import get_settings
 from interviewbot.dependencies import get_db
 
 router = APIRouter(prefix="/health", tags=["Health"])
@@ -16,3 +18,14 @@ async def health() -> dict[str, str]:
 async def health_db(db: AsyncSession = Depends(get_db)) -> dict[str, str]:
     await db.execute(text("SELECT 1"))
     return {"status": "healthy", "database": "connected"}
+
+
+@router.get("/redis")
+async def health_redis() -> dict[str, str]:
+    settings = get_settings()
+    redis = Redis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
+    try:
+        await redis.ping()
+        return {"status": "healthy", "redis": "connected"}
+    finally:
+        await redis.aclose()

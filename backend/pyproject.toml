@@ -48,6 +48,7 @@ test = [
     "pytest-cov>=5.0",
     "pytest-asyncio>=0.24",
     "pytest-randomly>=3.15",
+    "pytest-timeout>=2.3",
     "httpx",
 ]
 type_check = [
@@ -99,7 +100,7 @@ select = [
     "SIM",  # flake8-simplify
     "TID",  # flake8-tidy-imports
 ]
-extend-ignore = ["RUF005", "RUF012"]
+extend-ignore = ["B008", "RUF005", "RUF012"]  # B008: FastAPI Depends() in defaults is standard
 unfixable = ["F401"]
 
 [tool.ruff.lint.isort]
@@ -120,6 +121,13 @@ addopts = [
     "--cov=interviewbot",
     "--cov-report=term-missing",
     "--verbose",
+    "--timeout=90",
+    "-p no:randomly",
+]
+markers = [
+    "smoke: fast, critical-path tests that should always pass",
+    "integration: tests that call external services (AI, Stripe, SMTP)",
+    "slow: tests that take >30s due to setup or network",
 ]
 xfail_strict = true
 filterwarnings = [
@@ -127,6 +135,7 @@ filterwarnings = [
     "ignore::DeprecationWarning:passlib",
     "ignore::DeprecationWarning:jose",
     "ignore::DeprecationWarning:httpx",
+    "ignore::DeprecationWarning:pytest_asyncio",
 ]
 
 [tool.coverage.run]

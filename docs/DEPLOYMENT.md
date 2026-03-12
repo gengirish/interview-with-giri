@@ -118,7 +118,7 @@ fly secrets set \
   BONSAI_API_KEY="your-bonsai-key" \
   BONSAI_BASE_URL="https://api.trybons.ai/v1" \
   APP_URL="https://interview-with-giri.vercel.app" \
-  CORS_ORIGINS='["https://interview-with-giri.vercel.app"]' \
+  CORS_ORIGINS=https://interview-with-giri.vercel.app \
   --app interview-with-giri-api
 
 # Deploy
@@ -182,7 +182,7 @@ Once Vercel gives you the final URL, update the backend:
 ```bash
 fly secrets set \
   APP_URL="https://interview-with-giri.vercel.app" \
-  CORS_ORIGINS='["https://interview-with-giri.vercel.app"]' \
+  CORS_ORIGINS=https://interview-with-giri.vercel.app \
   --app interview-with-giri-api
 ```
 
@@ -243,7 +243,7 @@ After setting up custom domains, update CORS:
 ```bash
 fly secrets set \
   APP_URL="https://yourdomain.com" \
-  CORS_ORIGINS='["https://yourdomain.com"]' \
+  CORS_ORIGINS=https://yourdomain.com \
   --app interview-with-giri-api
 ```
 
@@ -343,7 +343,7 @@ BONSAI_API_KEY=<your key>
 APP_ENV=production
 DEBUG=false
 APP_URL=https://yourdomain.com
-CORS_ORIGINS=["https://yourdomain.com"]
+CORS_ORIGINS=https://yourdomain.com
 ```
 
 ### Step 3 — Configure Nginx for Your Domain
@@ -545,7 +545,7 @@ The AI engine uses a **provider chain**: OpenAI → Bonsai → Claude. It automa
 | `APP_ENV` | `dev` or `production` | `dev` |
 | `DEBUG` | Enable debug logging | `true` |
 | `APP_URL` | Public URL of the frontend | `http://localhost:3000` |
-| `CORS_ORIGINS` | JSON array of allowed origins | `["http://localhost:3000"]` |
+| `CORS_ORIGINS` | Comma-separated list of allowed origins | `http://localhost:3000` |
 
 ### Frontend (Build-Time — Vercel)
 
@@ -664,7 +664,7 @@ docker compose -f docker/docker-compose.prod.yml logs -f frontend
 Your `CORS_ORIGINS` on the backend doesn't include the Vercel frontend URL. Update it:
 
 ```bash
-fly secrets set CORS_ORIGINS='["https://interview-with-giri.vercel.app"]' -a interview-with-giri-api
+fly secrets set CORS_ORIGINS=https://interview-with-giri.vercel.app -a interview-with-giri-api
 ```
 
 ### Fly.io deploy fails with "release command failed"

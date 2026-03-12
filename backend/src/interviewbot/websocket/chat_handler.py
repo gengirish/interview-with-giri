@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import json
+import re
 from datetime import datetime, timezone
 
 import structlog
@@ -12,28 +15,77 @@ from interviewbot.services.ai_engine import AIEngine, InterviewConversation
 logger = structlog.get_logger()
 
 
+def _extract_code(message: str) -> str | None:
+    """Extract code block from a [Code Submission] message."""
+    if "[Code Submission]" not in message:
+        return None
+    match = re.search(r"```(?:\w+)?\n(.*?)```", message, re.DOTALL)
+    return match.group(1).strip() if match else None
+
+
+class FollowUpTracker:
+    """Tracks follow-up depth to ensure multi-level probing."""
+
+    def __init__(self, max_depth: int = 3) -> None:
+        self.current_topic_depth: int = 0
+        self.max_depth = max_depth
+        self.topics_explored: int = 0
+
+    def on_new_question(self) -> None:
+        if self.current_topic_depth > 0:
+            self.topics_explored += 1
+        self.current_topic_depth = 1
+
+    def on_follow_up(self) -> None:
+        self.current_topic_depth += 1
+
+    def should_probe_deeper(self) -> bool:
+        return self.current_topic_depth < self.max_depth
+
+    def get_depth_hint(self) -> str:
+        if self.current_topic_depth >= self.max_depth:
+            return ""
+        level = self.current_topic_depth + 1
+        hints = {
+            2: "Dig deeper: ask about trade-offs or alternative approaches.",
+            3: "Final probe: ask about production readiness, monitoring, or scaling.",
+        }
+        return hints.get(level, "")
+
+
 def _build_system_prompt(job: JobPosting, config: dict) -> str:
     skills = ", ".join(job.required_skills or [])
     role_type = job.role_type or "mixed"
 
-    if role_type == "technical":
+    if role_type in ("technical", "mixed"):
         template = (
-            "You are a senior technical interviewer conducting a text-based interview "
+            "You are a collaborative pair-programming partner conducting a technical interview "
             "for the role of {title}.\n\n"
             "## Context\n"
             "- Job Description: {jd}\n"
             "- Required Skills: {skills}\n"
             "- Difficulty: {difficulty}\n"
             "- Total Questions: {total}\n\n"
-            "## Rules\n"
-            "1. Ask ONE question at a time.\n"
-            "2. Start with an intro, then progress from easier to harder.\n"
-            "3. Ask follow-ups when answers are vague or incorrect.\n"
-            "4. Cover these areas: {skills}\n"
-            "5. Be professional, encouraging, conversational.\n"
-            "6. Never reveal expected answers.\n"
-            "7. After all questions, thank the candidate and say the interview is complete.\n\n"
-            "Respond with ONLY the interview question or follow-up."
+            "## Your Personality\n"
+            "You are NOT an interrogator. You are a senior engineer working through problems "
+            "with the candidate. You are curious, supportive, and interested in how they think.\n\n"
+            "## Pair-Programming Rules\n"
+            "1. Ask ONE problem at a time with a clear, practical problem statement.\n"
+            "2. When code is submitted (marked with [Code Submission]), analyze it:\n"
+            "   - Acknowledge what they did well FIRST\n"
+            "   - Probe their decisions: 'I noticed you used X — what if Y?'\n"
+            "   - Ask about trade-offs and complexity\n"
+            "   - Question edge cases\n"
+            "3. Go 2-3 levels deep on significant decisions:\n"
+            "   - Level 1: 'Why this approach?'\n"
+            "   - Level 2: 'How would this change if [constraint changes]?'\n"
+            "   - Level 3: 'In production, what monitoring or error handling would you add?'\n"
+            "4. If stuck, give a gentle hint like a real pair partner.\n"
+            "5. Discuss code as if reviewing a PR — naming, readability, testability.\n"
+            "6. Transition between coding and architecture discussion naturally.\n"
+            "7. After all questions, summarize what you discussed and thank them.\n\n"
+            "NEVER just say 'looks good.' Always probe deeper.\n"
+            "Respond conversationally. No metadata or scores."
         )
     else:
         template = (
@@ -99,10 +151,12 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
 
     config = job.interview_config or {}
     total_questions = config.get("num_questions", 10)
+    is_technical = (job.role_type or "").lower() in ("technical", "mixed")
 
     engine = AIEngine()
     system_prompt = _build_system_prompt(job, config)
     conversation = InterviewConversation(system_prompt)
+    tracker = FollowUpTracker(max_depth=3) if is_technical else None
 
     session.status = "in_progress"
     session.started_at = datetime.now(timezone.utc)
@@ -120,6 +174,9 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
             "total": total_questions,
         })
 
+        if tracker:
+            tracker.on_new_question()
+
         while True:
             raw = await websocket.receive_text()
             msg = json.loads(raw)
@@ -129,12 +186,41 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
 
             if msg.get("type") == "message":
                 candidate_text = msg.get("content", "")
+                is_code_submission = "[Code Submission]" in candidate_text
+
                 conversation.add_message("user", candidate_text)
                 await _save_message(db, session.id, "candidate", candidate_text)
-
                 await websocket.send_json({"type": "thinking"})
 
+                injections_added = 0
+                if is_code_submission and is_technical:
+                    code = _extract_code(candidate_text)
+                    if code:
+                        code_context = (
+                            f"\n\n[The candidate just submitted this code:\n```\n{code[:2000]}\n```\n"
+                            f"Analyze their code and respond as a pair-programming partner. "
+                            f"Acknowledge something specific they did well, then probe a design decision, "
+                            f"then suggest a twist or follow-up scenario. Keep it conversational.]"
+                        )
+                        conversation.add_message("system", code_context)
+                        injections_added += 1
+                if tracker and tracker.should_probe_deeper():
+                    depth_hint = tracker.get_depth_hint()
+                    if depth_hint:
+                        conversation.add_message("system", depth_hint)
+                        injections_added += 1
+
                 response = await engine.chat(conversation.get_messages())
+
+                for _ in range(injections_added):
+                    conversation.messages.pop(-1)
+
+                if tracker:
+                    if "?" in response:
+                        tracker.on_new_question()
+                    else:
+                        tracker.on_follow_up()
+
                 conversation.add_message("assistant", response)
                 await _save_message(db, session.id, "interviewer", response)
 
@@ -147,8 +233,9 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
                     })
                     break
                 else:
+                    msg_type = "code_review" if (is_code_submission and is_technical) else "question"
                     await websocket.send_json({
-                        "type": "question",
+                        "type": msg_type,
                         "content": response,
                         "progress": progress,
                         "total": total_questions,

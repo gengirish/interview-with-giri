@@ -3,6 +3,8 @@ import pytest
 
 from tests.conftest import JOB_PAYLOAD
 
+pytestmark = pytest.mark.smoke
+
 
 SIGNUP_A = {
     "org_name": "Org Alpha",

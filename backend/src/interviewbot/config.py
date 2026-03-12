@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -65,6 +66,14 @@ class Settings(BaseSettings):
 
     # CORS (comma-separated string; split via cors_origins_list property)
     cors_origins: str = "http://localhost:3000"
+
+    @model_validator(mode="after")
+    def validate_jwt_secret_in_prod(self) -> "Settings":
+        if self.app_env in {"prod", "production"} and (
+            not self.jwt_secret or self.jwt_secret == "change-me-in-production"
+        ):
+            raise ValueError("JWT_SECRET must be set to a secure value in production")
+        return self
 
     @property
     def cors_origins_list(self) -> list[str]:

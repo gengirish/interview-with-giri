@@ -149,7 +149,7 @@ The recommended zero-cost deployment splits the stack across free-tier services:
 | Component | Service | Free Tier |
 |-----------|---------|-----------|
 | Frontend | [Vercel](https://vercel.com) | Unlimited for hobby |
-| Backend | [Railway](https://railway.app) | 500 hrs/month, $5 credit |
+| Backend | [Fly.io](https://fly.io) | 3 shared VMs, 256 MB each |
 | PostgreSQL | [Neon](https://neon.tech) | 0.5 GB, always-on |
 | Redis | [Upstash](https://upstash.com) | 10K commands/day |
 
@@ -164,25 +164,34 @@ The recommended zero-cost deployment splits the stack across free-tier services:
 1. Create a database at [upstash.com](https://console.upstash.com)
 2. Copy the Redis URL — it looks like `rediss://default:xxx@us1-xxx.upstash.io:6379`
 
-### Step 2 — Deploy backend to Railway
+### Step 2 — Deploy backend to Fly.io
 
-1. Go to [railway.app](https://railway.app) and create a new project
-2. Click **Deploy from GitHub repo** → select `interview-with-giri`
-3. Set **Root Directory** to `backend`
-4. Add these environment variables in the Railway dashboard:
+1. Install Fly CLI and authenticate:
 
-```
-DATABASE_URL=postgresql+asyncpg://...your-neon-url...
-REDIS_URL=rediss://...your-upstash-url...
-JWT_SECRET=<openssl rand -hex 32>
-BONSAI_API_KEY=<your key>
-APP_ENV=production
-CORS_ORIGINS=["https://your-app.vercel.app"]
-APP_URL=https://your-app.vercel.app
+```bash
+# Windows (PowerShell)
+pwsh -Command "iwr https://fly.io/install.ps1 -useb | iex"
+fly auth login
 ```
 
-5. Railway auto-detects the `Dockerfile` and deploys. Alembic migrations run automatically via the `Procfile` release command.
-6. Note the public URL Railway gives you (e.g. `https://interview-with-giri-production.up.railway.app`).
+2. Create and deploy the backend app from `backend`:
+
+```
+cd backend
+fly apps create interview-with-giri-api --org personal
+fly secrets set \
+  DATABASE_URL=postgresql+asyncpg://...your-neon-url...?sslmode=require \
+  REDIS_URL=rediss://...your-upstash-url... \
+  JWT_SECRET=<openssl rand -hex 32> \
+  BONSAI_API_KEY=<your key> \
+  APP_ENV=production \
+  CORS_ORIGINS=https://your-app.vercel.app \
+  APP_URL=https://your-app.vercel.app \
+  --app interview-with-giri-api
+fly deploy --app interview-with-giri-api
+```
+
+3. Fly.io builds the backend Docker image, runs migrations, and exposes your API URL (e.g. `https://interview-with-giri-api.fly.dev`).
 
 ### Step 3 — Deploy frontend to Vercel
 
@@ -192,21 +201,28 @@ APP_URL=https://your-app.vercel.app
 4. Add environment variables:
 
 ```
-NEXT_PUBLIC_API_URL=https://interview-with-giri-production.up.railway.app
-NEXT_PUBLIC_WS_URL=wss://interview-with-giri-production.up.railway.app
+NEXT_PUBLIC_API_URL=https://interview-with-giri-api.fly.dev
+NEXT_PUBLIC_WS_URL=wss://interview-with-giri-api.fly.dev
 ```
 
 5. Click **Deploy** — Vercel builds and serves the frontend at your `*.vercel.app` domain.
-6. Go back to Railway and update `CORS_ORIGINS` and `APP_URL` with the actual Vercel URL.
+6. Update Fly.io secrets with your final Vercel URL:
+
+```bash
+fly secrets set \
+  CORS_ORIGINS=https://your-final-vercel-url.vercel.app \
+  APP_URL=https://your-final-vercel-url.vercel.app \
+  --app interview-with-giri-api
+```
 
 ### Step 4 — Verify
 
 ```bash
 # Health check
-curl https://your-railway-url/api/v1/health
+curl https://interview-with-giri-api.fly.dev/api/v1/health
 
 # Sign up
-curl -X POST https://your-railway-url/api/v1/auth/signup \
+curl -X POST https://interview-with-giri-api.fly.dev/api/v1/auth/signup \
   -H "Content-Type: application/json" \
   -d '{"org_name":"Test Corp","full_name":"Test User","email":"test@test.com","password":"password123"}'
 ```
@@ -285,12 +301,33 @@ uv run mypy src/
 # Run all tests (requires Postgres running via docker-compose.dev.yml)
 uv run pytest
 
+# Run smoke tests only (fast, no external services needed)
+uv run pytest -m smoke
+
 # Run tests with verbose output
 uv run pytest -v --tb=short
+
+# Skip slow / integration tests locally
+uv run pytest -m "not integration and not slow"
 
 # Run all checks via nox
 uv run nox
 ```
+
+### Test Markers
+
+Tests are tagged with markers so you can run subsets:
+
+| Marker | Purpose | Needs external services? |
+|--------|---------|--------------------------|
+| `smoke` | Critical-path API + RBAC + auth tests | Postgres only |
+| `integration` | Tests that call external APIs (AI, Stripe) | Yes |
+| `slow` | Tests that take >30s | Varies |
+
+All tests have a **90-second timeout** (`--timeout=90`) to prevent hangs.
+
+Random ordering is disabled by default (`-p no:randomly`). Enable it for a
+specific run with `uv run pytest -p randomly`.
 
 ### Database Migrations (Alembic)
 
@@ -311,6 +348,17 @@ cd frontend
 npm run lint
 ```
 
+### Post-Deploy Sanity Checks
+
+After deploying, run the sanity script to verify both API and frontend:
+
+```bash
+python scripts/post_deploy_check.py
+
+# Or point at a different environment
+python scripts/post_deploy_check.py --api https://my-api.fly.dev --frontend https://my-app.vercel.app
+```
+
 ### Seed Users
 
 The `db/seed.sql` creates a demo organization with two users:
@@ -323,6 +371,20 @@ The `db/seed.sql` creates a demo organization with two users:
 ### CI
 
 GitHub Actions runs on every push — linting, type checking, and tests. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+The CI pipeline has two test stages:
+
+1. **backend-smoke** — runs `pytest -m smoke` (fast, no external APIs).
+2. **backend-full** — runs the complete suite after smoke passes.
+
+### Troubleshooting Tests
+
+| Symptom | Fix |
+|---------|-----|
+| `ConnectionRefusedError` on port 5432/5433 | Start Postgres via `docker compose -f docker-compose.dev.yml up -d` |
+| `TypeError: connect() got an unexpected keyword argument 'sslmode'` | Set `TEST_DATABASE_URL` to a plain `postgresql+asyncpg://` URL (sslmode is handled internally) |
+| Tests hang on AI-related tests | Run with `-m "not integration"` or set fake API keys |
+| `pytest-randomly` causes flaky order | Disabled by default; re-enable with `-p randomly` |
 
 ## License
 

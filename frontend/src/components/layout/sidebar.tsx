@@ -94,6 +94,7 @@ export function Sidebar({ className }: SidebarProps) {
         <button
           onClick={logout}
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+          aria-label="Sign out"
         >
           <LogOut className="h-5 w-5" />
           Sign Out

@@ -13,7 +13,6 @@ def _make_connect_args(url: str) -> dict:  # type: ignore[type-arg]
     if "sslmode=" in url:
         ctx = _ssl.create_default_context()
         ctx.check_hostname = False
-        ctx.verify_mode = _ssl.CERT_NONE
         return {"ssl": ctx}
     return {}
 

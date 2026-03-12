@@ -15,6 +15,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export default function AnalyticsPage() {
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
@@ -27,7 +28,9 @@ export default function AnalyticsPage() {
         setOverview(o);
         setJobStats(j);
       })
-      .catch(() => {})
+      .catch((err: unknown) => {
+        toast.error(err instanceof Error ? err.message : "Failed to load analytics");
+      })
       .finally(() => setLoading(false));
   }, []);
 

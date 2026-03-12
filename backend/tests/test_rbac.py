@@ -7,6 +7,8 @@ import pytest
 
 from tests.conftest import JOB_PAYLOAD
 
+pytestmark = pytest.mark.smoke
+
 
 ADMIN_SIGNUP = {
     "org_name": "RBAC Test Corp",

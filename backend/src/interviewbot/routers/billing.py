@@ -159,20 +159,35 @@ async def stripe_webhook(
         stripe_customer_id = data.get("customer")
         stripe_sub_id = data.get("subscription")
 
-        if org_id and plan_id:
+        if org_id and plan_id and stripe_sub_id:
             plan = PLAN_CONFIGS.get(plan_id, PLAN_CONFIGS["starter"])
-            sub = Subscription(
-                org_id=org_id,
-                stripe_customer_id=stripe_customer_id,
-                stripe_subscription_id=stripe_sub_id,
-                plan_tier=plan_id,
-                interviews_limit=plan["interviews_limit"],
-                interviews_used=0,
-                status="active",
+            result = await db.execute(
+                select(Subscription).where(
+                    Subscription.stripe_subscription_id == stripe_sub_id
+                )
             )
-            db.add(sub)
+            sub = result.scalar_one_or_none()
+            if sub:
+                sub.org_id = UUID(org_id)
+                sub.stripe_customer_id = stripe_customer_id
+                sub.plan_tier = plan_id
+                sub.interviews_limit = plan["interviews_limit"]
+                sub.status = "active"
+                logger.info("subscription_updated", org_id=org_id, plan=plan_id)
+            else:
+                sub = Subscription(
+                    org_id=org_id,
+                    stripe_customer_id=stripe_customer_id,
+                    stripe_subscription_id=stripe_sub_id,
+                    plan_tier=plan_id,
+                    interviews_limit=plan["interviews_limit"],
+                    interviews_used=0,
+                    status="active",
+                )
+                db.add(sub)
+                logger.info("subscription_created", org_id=org_id, plan=plan_id)
+
             await db.commit()
-            logger.info("subscription_created", org_id=org_id, plan=plan_id)
 
     elif event_type == "customer.subscription.deleted":
         stripe_sub_id = data.get("id")

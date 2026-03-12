@@ -9,6 +9,7 @@ import {
   Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export default function SettingsPage() {
   const [sub, setSub] = useState<SubscriptionInfo | null>(null);
@@ -21,7 +22,9 @@ export default function SettingsPage() {
     api
       .getSubscription()
       .then(setSub)
-      .catch(() => {})
+      .catch((err: unknown) => {
+        toast.error(err instanceof Error ? err.message : "Failed to load subscription");
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -29,8 +32,8 @@ export default function SettingsPage() {
     try {
       const res = await api.createCheckout(planId);
       if (res.url) window.location.href = res.url;
-    } catch {
-      // error
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to start checkout");
     }
   }
 
@@ -38,25 +41,15 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!webhookUrl) return;
     try {
-      const token = localStorage.getItem("token");
-      await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001"}/api/v1/webhooks/config`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            url: webhookUrl,
-            events: ["interview.completed", "interview.scored"],
-          }),
-        },
-      );
+      await api.addWebhookConfig({
+        url: webhookUrl,
+        events: ["interview.completed", "interview.scored"],
+        secret: "",
+      });
       setWebhookSaved(true);
       setTimeout(() => setWebhookSaved(false), 3000);
-    } catch {
-      // error
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save webhook");
     }
   }
 
@@ -246,10 +239,11 @@ export default function SettingsPage() {
           </p>
           <form onSubmit={handleSaveWebhook} className="mt-4 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
+              <label htmlFor="webhook-url" className="block text-sm font-medium text-slate-700 mb-1">
                 Webhook URL
               </label>
               <input
+                id="webhook-url"
                 type="url"
                 required
                 value={webhookUrl}

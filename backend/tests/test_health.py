@@ -1,6 +1,8 @@
 """E2E tests for health check endpoints."""
 import pytest
 
+pytestmark = pytest.mark.smoke
+
 
 @pytest.mark.asyncio
 async def test_health_endpoint(client):

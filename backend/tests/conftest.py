@@ -1,3 +1,4 @@
+import os
 import uuid
 from collections.abc import AsyncGenerator
 
@@ -12,10 +13,11 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from interviewbot.config import get_settings
+from interviewbot.models.database import _make_connect_args, _strip_sslmode
 from interviewbot.models.tables import Base
 
 DEMO_ORG_ID = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+DEFAULT_TEST_DATABASE_URL = "postgresql+asyncpg://postgres:changeme@localhost:5433/interviewbot"
 
 _test_engine = None
 
@@ -23,8 +25,17 @@ _test_engine = None
 def _get_test_engine():
     global _test_engine
     if _test_engine is None:
-        settings = get_settings()
-        _test_engine = create_async_engine(settings.database_url, echo=False, pool_size=5)
+        test_database_url = (
+            os.getenv("TEST_DATABASE_URL")
+            or os.getenv("DATABASE_URL")
+            or DEFAULT_TEST_DATABASE_URL
+        )
+        _test_engine = create_async_engine(
+            _strip_sslmode(test_database_url),
+            echo=False,
+            pool_size=5,
+            connect_args=_make_connect_args(test_database_url),
+        )
     return _test_engine
 
 
@@ -34,11 +45,10 @@ def _get_test_session_factory():
     )
 
 
-_TRUNCATE_SQL = text(
-    "TRUNCATE TABLE candidate_report, interview_message, "
-    "interview_session, job_posting, subscription, users, organization "
-    "CASCADE"
-)
+def _truncate_sql() -> text:
+    """Build TRUNCATE from model metadata so it stays in sync automatically."""
+    table_names = ", ".join(t.name for t in reversed(Base.metadata.sorted_tables))
+    return text(f"TRUNCATE TABLE {table_names} CASCADE")
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
@@ -48,9 +58,19 @@ async def setup_database():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
+    # Verify at least one table was actually created (catches pooler DDL issues)
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            text("SELECT count(*) FROM information_schema.tables WHERE table_name = 'users'")
+        )
+        if result.scalar() == 0:
+            pytest.exit("setup_database: tables were NOT created — check DB connectivity", 1)
     yield
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+    except Exception:  # noqa: BLE001
+        pass
     await engine.dispose()
 
 
@@ -60,8 +80,11 @@ async def _cleanup_after_test():
     yield
     factory = _get_test_session_factory()
     async with factory() as session:
-        await session.execute(_TRUNCATE_SQL)
-        await session.commit()
+        try:
+            await session.execute(_truncate_sql())
+            await session.commit()
+        except Exception:  # noqa: BLE001
+            await session.rollback()
 
 
 @pytest_asyncio.fixture(loop_scope="session")
@@ -102,6 +125,8 @@ def _make_token(
     user_id: str | None = None,
     email: str | None = None,
 ) -> str:
+    from interviewbot.config import get_settings
+
     settings = get_settings()
     return jwt.encode(
         {
