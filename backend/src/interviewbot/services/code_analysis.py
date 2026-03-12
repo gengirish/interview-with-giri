@@ -6,7 +6,7 @@ import re
 
 import structlog
 
-from interviewbot.services.ai_engine import AIEngine, CODE_REVIEW_FOLLOW_UP_PROMPT
+from interviewbot.services.ai_engine import CODE_REVIEW_FOLLOW_UP_PROMPT, AIEngine
 
 logger = structlog.get_logger()
 
@@ -43,18 +43,10 @@ def analyze_code_patterns(code: str) -> dict:
     lines = code.strip().split("\n")
     analysis = {
         "line_count": len(lines),
-        "has_comments": any(
-            line.strip().startswith(("#", "//", "/*", "*")) for line in lines
-        ),
-        "has_error_handling": bool(
-            re.search(r"\b(try|catch|except|finally|rescue)\b", code)
-        ),
-        "has_tests": bool(
-            re.search(r"\b(test_|describe|it\(|assert|expect)\b", code)
-        ),
-        "has_type_hints": bool(
-            re.search(r"(: \w+|-> \w+|\binterface\b|\btype \w+)", code)
-        ),
+        "has_comments": any(line.strip().startswith(("#", "//", "/*", "*")) for line in lines),
+        "has_error_handling": bool(re.search(r"\b(try|catch|except|finally|rescue)\b", code)),
+        "has_tests": bool(re.search(r"\b(test_|describe|it\(|assert|expect)\b", code)),
+        "has_type_hints": bool(re.search(r"(: \w+|-> \w+|\binterface\b|\btype \w+)", code)),
         "complexity_indicators": [],
     }
 

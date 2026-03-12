@@ -6,6 +6,7 @@ Tests cover:
 - RBAC: admin/hiring_manager can export; viewer cannot
 - 404 when session or report does not exist
 """
+
 import csv
 import io
 import uuid
@@ -43,8 +44,9 @@ async def _setup_session_with_report(client, db):
     session_id = session["id"]
 
     # Insert a CandidateReport directly since we can't mock the AI scoring
+    from sqlalchemy import update
+
     from interviewbot.models.tables import CandidateReport, InterviewSession
-    from sqlalchemy import select, update
 
     # Mark session completed with score
     await db.execute(
@@ -61,11 +63,19 @@ async def _setup_session_with_report(client, db):
         concerns=["Limited frontend experience"],
         confidence_score=0.85,
         skill_scores={
-            "code_quality": {"score": 8.0, "evidence": "Clean, well-structured code", "notes": "Good"},
+            "code_quality": {
+                "score": 8.0,
+                "evidence": "Clean, well-structured code",
+                "notes": "Good",
+            },
             "problem_solving": {"score": 7.5, "evidence": "Systematic approach", "notes": "Solid"},
         },
         behavioral_scores={
-            "communication": {"score": 9.0, "evidence": "Clear explanations", "notes": "Excellent"},
+            "communication": {
+                "score": 9.0,
+                "evidence": "Clear explanations",
+                "notes": "Excellent",
+            },
         },
         extended_data={
             "experience_level_assessment": "Senior",

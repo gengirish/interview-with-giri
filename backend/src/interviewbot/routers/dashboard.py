@@ -1,3 +1,4 @@
+from datetime import UTC
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -13,7 +14,7 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 @router.get("/stats", response_model=DashboardStats)
 async def get_dashboard_stats(
-    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> DashboardStats:
@@ -51,8 +52,9 @@ async def get_dashboard_stats(
     avg_score_raw = avg_result.scalar()
     avg_score = round(float(avg_score_raw), 1) if avg_score_raw else None
 
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc)
+    from datetime import datetime
+
+    now = datetime.now(UTC)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     month_result = await db.execute(
         select(func.count()).select_from(

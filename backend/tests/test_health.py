@@ -1,4 +1,5 @@
 """E2E tests for health check endpoints."""
+
 import pytest
 
 pytestmark = pytest.mark.smoke

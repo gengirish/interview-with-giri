@@ -11,15 +11,15 @@ from interviewbot.config import get_settings
 logger = structlog.get_logger()
 
 LANGUAGE_IDS = {
-    "python": 71,      # Python 3.8
+    "python": 71,  # Python 3.8
     "javascript": 63,  # Node.js 12
-    "java": 62,        # Java (OpenJDK 13)
-    "c++": 54,         # C++ (GCC 9.2)
+    "java": 62,  # Java (OpenJDK 13)
+    "c++": 54,  # C++ (GCC 9.2)
     "cpp": 54,
-    "c": 50,           # C (GCC 9.2)
-    "go": 60,          # Go 1.13
-    "ruby": 72,        # Ruby 2.7
-    "rust": 73,        # Rust 1.40
+    "c": 50,  # C (GCC 9.2)
+    "go": 60,  # Go 1.13
+    "ruby": 72,  # Ruby 2.7
+    "rust": 73,  # Rust 1.40
     "typescript": 74,  # TypeScript 3.7
 }
 
@@ -46,9 +46,10 @@ async def execute_code(
     lang_id = LANGUAGE_IDS.get(language.lower())
 
     if not lang_id:
+        supported = ", ".join(LANGUAGE_IDS.keys())
         return ExecutionResult(
             stdout="",
-            stderr=f"Unsupported language: {language}. Supported: {', '.join(LANGUAGE_IDS.keys())}",
+            stderr=f"Unsupported language: {language}. Supported: {supported}",
             compile_output="",
             status="error",
             time=None,

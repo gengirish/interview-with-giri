@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import contextlib
+from datetime import UTC, datetime
 import json
 import re
-from datetime import datetime, timezone
 
-import structlog
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import structlog
 
 from interviewbot.models.tables import InterviewMessage, InterviewSession, JobPosting
 from interviewbot.services.ai_engine import AIEngine, InterviewConversation
@@ -59,16 +60,17 @@ def _build_system_prompt(job: JobPosting, config: dict) -> str:
 
     if role_type in ("technical", "mixed"):
         template = (
-            "You are a collaborative pair-programming partner conducting a technical interview "
-            "for the role of {title}.\n\n"
+            "You are a collaborative pair-programming partner conducting a technical "
+            "interview for the role of {title}.\n\n"
             "## Context\n"
             "- Job Description: {jd}\n"
             "- Required Skills: {skills}\n"
             "- Difficulty: {difficulty}\n"
             "- Total Questions: {total}\n\n"
             "## Your Personality\n"
-            "You are NOT an interrogator. You are a senior engineer working through problems "
-            "with the candidate. You are curious, supportive, and interested in how they think.\n\n"
+            "You are NOT an interrogator. You are a senior engineer working through "
+            "problems with the candidate. You are curious, supportive, and interested "
+            "in how they think.\n\n"
             "## Pair-Programming Rules\n"
             "1. Ask ONE problem at a time with a clear, practical problem statement.\n"
             "2. When code is submitted (marked with [Code Submission]), analyze it:\n"
@@ -114,9 +116,7 @@ def _build_system_prompt(job: JobPosting, config: dict) -> str:
     )
 
 
-async def _save_message(
-    db: AsyncSession, session_id, role: str, content: str
-) -> None:
+async def _save_message(db: AsyncSession, session_id, role: str, content: str) -> None:
     msg = InterviewMessage(session_id=session_id, role=role, content=content)
     db.add(msg)
     await db.commit()
@@ -125,9 +125,7 @@ async def _save_message(
 async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSession) -> None:
     await websocket.accept()
 
-    result = await db.execute(
-        select(InterviewSession).where(InterviewSession.token == token)
-    )
+    result = await db.execute(select(InterviewSession).where(InterviewSession.token == token))
     session = result.scalar_one_or_none()
 
     if not session:
@@ -136,7 +134,9 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
         return
 
     if session.status == "completed":
-        await websocket.send_json({"type": "error", "content": "This interview has already been completed"})
+        await websocket.send_json(
+            {"type": "error", "content": "This interview has already been completed"}
+        )
         await websocket.close()
         return
 
@@ -159,7 +159,7 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
     tracker = FollowUpTracker(max_depth=3) if is_technical else None
 
     session.status = "in_progress"
-    session.started_at = datetime.now(timezone.utc)
+    session.started_at = datetime.now(UTC)
     await db.commit()
 
     try:
@@ -167,12 +167,14 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
         conversation.add_message("assistant", first_question)
         await _save_message(db, session.id, "interviewer", first_question)
 
-        await websocket.send_json({
-            "type": "question",
-            "content": first_question,
-            "progress": 1,
-            "total": total_questions,
-        })
+        await websocket.send_json(
+            {
+                "type": "question",
+                "content": first_question,
+                "progress": 1,
+                "total": total_questions,
+            }
+        )
 
         if tracker:
             tracker.on_new_question()
@@ -197,10 +199,12 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
                     code = _extract_code(candidate_text)
                     if code:
                         code_context = (
-                            f"\n\n[The candidate just submitted this code:\n```\n{code[:2000]}\n```\n"
+                            f"\n\n[The candidate just submitted this code:\n```\n"
+                            f"{code[:2000]}\n```\n"
                             f"Analyze their code and respond as a pair-programming partner. "
-                            f"Acknowledge something specific they did well, then probe a design decision, "
-                            f"then suggest a twist or follow-up scenario. Keep it conversational.]"
+                            f"Acknowledge something specific they did well, then probe a design "
+                            f"decision, then suggest a twist or follow-up scenario. "
+                            f"Keep it conversational.]"
                         )
                         conversation.add_message("system", code_context)
                         injections_added += 1
@@ -227,19 +231,25 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
                 progress = conversation.get_question_count()
 
                 if progress >= total_questions:
-                    await websocket.send_json({
-                        "type": "end",
-                        "content": response,
-                    })
+                    await websocket.send_json(
+                        {
+                            "type": "end",
+                            "content": response,
+                        }
+                    )
                     break
                 else:
-                    msg_type = "code_review" if (is_code_submission and is_technical) else "question"
-                    await websocket.send_json({
-                        "type": msg_type,
-                        "content": response,
-                        "progress": progress,
-                        "total": total_questions,
-                    })
+                    msg_type = (
+                        "code_review" if (is_code_submission and is_technical) else "question"
+                    )
+                    await websocket.send_json(
+                        {
+                            "type": msg_type,
+                            "content": response,
+                            "progress": progress,
+                            "total": total_questions,
+                        }
+                    )
 
     except WebSocketDisconnect:
         logger.info("candidate_disconnected", session_id=str(session.id))
@@ -248,20 +258,18 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
         return
     except Exception as e:
         logger.error("interview_error", error=str(e), session_id=str(session.id))
-        try:
-            await websocket.send_json({"type": "error", "content": "An error occurred. Please try again."})
-        except Exception:
-            pass
+        with contextlib.suppress(Exception):
+            await websocket.send_json(
+                {"type": "error", "content": "An error occurred. Please try again."}
+            )
         session.status = "disconnected"
         await db.commit()
         return
 
     session.status = "completed"
-    session.completed_at = datetime.now(timezone.utc)
+    session.completed_at = datetime.now(UTC)
     if session.started_at:
-        session.duration_seconds = int(
-            (session.completed_at - session.started_at).total_seconds()
-        )
+        session.duration_seconds = int((session.completed_at - session.started_at).total_seconds())
     await db.commit()
 
     logger.info(

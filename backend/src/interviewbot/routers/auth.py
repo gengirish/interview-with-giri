@@ -1,5 +1,4 @@
-import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from jose import jwt
@@ -22,7 +21,7 @@ limiter = Limiter(key_func=get_remote_address, default_limits=[], enabled=True)
 def _create_token(user_id: str, email: str, role: str, org_id: str) -> tuple[str, int]:
     settings = get_settings()
     expires_in = settings.jwt_expire_minutes * 60
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
+    expire = datetime.now(UTC) + timedelta(minutes=settings.jwt_expire_minutes)
     token = jwt.encode(
         {
             "sub": user_id,
@@ -39,7 +38,9 @@ def _create_token(user_id: str, email: str, role: str, org_id: str) -> tuple[str
 
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
-async def signup(request: Request, req: SignupRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+async def signup(
+    request: Request, req: SignupRequest, db: AsyncSession = Depends(get_db)
+) -> TokenResponse:
     existing = await db.execute(select(User).where(User.email == req.email))
     if existing.scalar_one_or_none():
         raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
@@ -68,9 +69,7 @@ async def signup(request: Request, req: SignupRequest, db: AsyncSession = Depend
     await db.commit()
     await db.refresh(user)
 
-    token, expires_in = _create_token(
-        str(user.id), user.email, user.role, str(org.id)
-    )
+    token, expires_in = _create_token(str(user.id), user.email, user.role, str(org.id))
 
     return TokenResponse(
         access_token=token,
@@ -82,7 +81,9 @@ async def signup(request: Request, req: SignupRequest, db: AsyncSession = Depend
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("10/minute")
-async def login(request: Request, req: LoginRequest, db: AsyncSession = Depends(get_db)) -> TokenResponse:
+async def login(
+    request: Request, req: LoginRequest, db: AsyncSession = Depends(get_db)
+) -> TokenResponse:
     result = await db.execute(select(User).where(User.email == req.email))
     user = result.scalar_one_or_none()
 
@@ -92,9 +93,7 @@ async def login(request: Request, req: LoginRequest, db: AsyncSession = Depends(
     if not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Account is disabled")
 
-    token, expires_in = _create_token(
-        str(user.id), user.email, user.role, str(user.org_id)
-    )
+    token, expires_in = _create_token(str(user.id), user.email, user.role, str(user.org_id))
 
     return TokenResponse(
         access_token=token,

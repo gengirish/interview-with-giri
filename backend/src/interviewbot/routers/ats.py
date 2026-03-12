@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from uuid import UUID
 
-import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
+import structlog
 
 from interviewbot.dependencies import get_db, get_org_id, require_role
 from interviewbot.models.schemas import (
@@ -32,8 +33,7 @@ async def get_ats_configs(
     org = await _get_org(db, org_id)
     configs = (org.settings or {}).get("ats_integrations", [])
     return [
-        ATSConfigResponse(platform=c["platform"], enabled=c.get("enabled", True))
-        for c in configs
+        ATSConfigResponse(platform=c["platform"], enabled=c.get("enabled", True)) for c in configs
     ]
 
 
@@ -45,7 +45,7 @@ async def save_ats_config(
     org_id: UUID = Depends(get_org_id),
 ) -> dict:
     org = await _get_org(db, org_id)
-    settings = org.settings or {}
+    settings = dict(org.settings or {})
     integrations = settings.get("ats_integrations", [])
 
     # Upsert: replace existing config for same platform
@@ -53,6 +53,7 @@ async def save_ats_config(
     integrations.append(config.model_dump())
     settings["ats_integrations"] = integrations
     org.settings = settings
+    flag_modified(org, "settings")
     await db.commit()
 
     return {"status": "saved", "platform": config.platform}
@@ -66,11 +67,12 @@ async def delete_ats_config(
     org_id: UUID = Depends(get_org_id),
 ) -> dict:
     org = await _get_org(db, org_id)
-    settings = org.settings or {}
+    settings = dict(org.settings or {})
     integrations = settings.get("ats_integrations", [])
     integrations = [i for i in integrations if i.get("platform") != platform]
     settings["ats_integrations"] = integrations
     org.settings = settings
+    flag_modified(org, "settings")
     await db.commit()
     return {"status": "deleted", "platform": platform}
 
@@ -85,9 +87,7 @@ async def push_scorecard_to_ats(
     # Get org ATS config
     org = await _get_org(db, org_id)
     integrations = (org.settings or {}).get("ats_integrations", [])
-    ats_config = next(
-        (i for i in integrations if i.get("platform") == req.platform), None
-    )
+    ats_config = next((i for i in integrations if i.get("platform") == req.platform), None)
 
     if not ats_config:
         raise HTTPException(
@@ -157,7 +157,5 @@ async def _get_org(db: AsyncSession, org_id: UUID) -> Organization:
     result = await db.execute(select(Organization).where(Organization.id == org_id))
     org = result.scalar_one_or_none()
     if not org:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
     return org

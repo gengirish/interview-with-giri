@@ -20,7 +20,7 @@ router = APIRouter(prefix="/job-postings", tags=["Job Postings"])
 @router.post("", response_model=JobPostingResponse, status_code=status.HTTP_201_CREATED)
 async def create_job_posting(
     req: JobPostingCreateRequest,
-    user: dict = Depends(require_role("admin", "hiring_manager")),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> JobPostingResponse:
@@ -44,7 +44,7 @@ async def create_job_posting(
 async def list_job_postings(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
-    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> PaginatedResponse:
@@ -71,7 +71,7 @@ async def list_job_postings(
 @router.get("/{posting_id}", response_model=JobPostingResponse)
 async def get_job_posting(
     posting_id: UUID,
-    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> JobPostingResponse:
@@ -83,7 +83,7 @@ async def get_job_posting(
 async def update_job_posting(
     posting_id: UUID,
     req: JobPostingUpdateRequest,
-    user: dict = Depends(require_role("admin", "hiring_manager")),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> JobPostingResponse:
@@ -105,7 +105,7 @@ async def update_job_posting(
 @router.delete("/{posting_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_job_posting(
     posting_id: UUID,
-    user: dict = Depends(require_role("admin")),  # noqa: B006
+    user: dict = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> None:
@@ -117,7 +117,7 @@ async def delete_job_posting(
 @router.post("/{posting_id}/generate-link", response_model=dict)
 async def generate_interview_link(
     posting_id: UUID,
-    user: dict = Depends(require_role("admin", "hiring_manager")),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> dict[str, str]:
@@ -138,13 +138,13 @@ async def generate_interview_link(
 @router.post("/{posting_id}/extract-skills", response_model=dict)
 async def extract_skills(
     posting_id: UUID,
-    user: dict = Depends(require_role("admin", "hiring_manager")),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> dict:
     posting = await _get_posting_or_404(db, org_id, posting_id)
 
-    from interviewbot.services.ai_engine import AIEngine, SKILL_EXTRACTION_PROMPT
+    from interviewbot.services.ai_engine import SKILL_EXTRACTION_PROMPT, AIEngine
 
     engine = AIEngine()
     prompt = SKILL_EXTRACTION_PROMPT.format(job_description=posting.job_description[:3000])
@@ -159,7 +159,11 @@ async def extract_skills(
             cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
         result = json_mod.loads(cleaned)
     except json_mod.JSONDecodeError:
-        result = {"technical_skills": [], "soft_skills": [], "error": "Failed to parse AI response"}
+        result = {
+            "technical_skills": [],
+            "soft_skills": [],
+            "error": "Failed to parse AI response",
+        }
 
     all_skills = result.get("technical_skills", []) + result.get("soft_skills", [])
     if all_skills:
@@ -169,9 +173,7 @@ async def extract_skills(
     return result
 
 
-async def _get_posting_or_404(
-    db: AsyncSession, org_id: UUID, posting_id: UUID
-) -> JobPosting:
+async def _get_posting_or_404(db: AsyncSession, org_id: UUID, posting_id: UUID) -> JobPosting:
     result = await db.execute(
         select(JobPosting).where(
             JobPosting.id == posting_id,

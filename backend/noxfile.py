@@ -23,8 +23,18 @@ def test(s: Session) -> None:
     "command",
     [
         param(
-            ["ruff", "check", ".", "--select", "I", "--select", "F401",
-             "--extend-fixable", "F401", "--fix"],
+            [
+                "ruff",
+                "check",
+                ".",
+                "--select",
+                "I",
+                "--select",
+                "F401",
+                "--extend-fixable",
+                "F401",
+                "--fix",
+            ],
             id="sort_imports",
         ),
         param(["ruff", "format", "."], id="format"),

@@ -1,4 +1,5 @@
 """E2E tests for dashboard stats and analytics endpoints."""
+
 import pytest
 
 from tests.conftest import JOB_PAYLOAD, SIGNUP_PAYLOAD

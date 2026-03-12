@@ -1,4 +1,5 @@
 """E2E tests for interview session management and public candidate endpoints."""
+
 import pytest
 
 from tests.conftest import JOB_PAYLOAD, SIGNUP_PAYLOAD
@@ -15,9 +16,7 @@ async def _setup_job_with_link(client):
     job_resp = await client.post("/api/v1/job-postings", json=JOB_PAYLOAD, headers=headers)
     job_id = job_resp.json()["id"]
 
-    link_resp = await client.post(
-        f"/api/v1/job-postings/{job_id}/generate-link", headers=headers
-    )
+    link_resp = await client.post(f"/api/v1/job-postings/{job_id}/generate-link", headers=headers)
     interview_token = link_resp.json()["token"]
     return headers, job_id, interview_token
 
@@ -127,9 +126,7 @@ async def test_list_interviews_filter_by_status(client):
     assert resp_pending.status_code == 200
     assert resp_pending.json()["total"] == 1
 
-    resp_progress = await client.get(
-        "/api/v1/interviews?status=in_progress", headers=headers
-    )
+    resp_progress = await client.get("/api/v1/interviews?status=in_progress", headers=headers)
     assert resp_progress.status_code == 200
     assert resp_progress.json()["total"] == 1
 

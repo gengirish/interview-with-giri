@@ -1,4 +1,5 @@
 """E2E tests for authentication flows."""
+
 import pytest
 
 from tests.conftest import SIGNUP_PAYLOAD

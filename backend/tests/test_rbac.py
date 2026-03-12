@@ -3,6 +3,7 @@
 Tests that admin, hiring_manager, and viewer roles have correct
 permissions across all protected endpoints.
 """
+
 import pytest
 
 from tests.conftest import JOB_PAYLOAD
@@ -96,7 +97,12 @@ async def test_hiring_manager_cannot_invite_user(client):
     _, hm_h, _ = await _setup_org_with_roles(client)
     resp = await client.post(
         "/api/v1/users",
-        json={"email": "x@test.com", "full_name": "X", "role": "viewer", "password": "password123"},
+        json={
+            "email": "x@test.com",
+            "full_name": "X",
+            "role": "viewer",
+            "password": "password123",
+        },
         headers=hm_h,
     )
     assert resp.status_code == 403
@@ -107,7 +113,12 @@ async def test_viewer_cannot_invite_user(client):
     _, _, viewer_h = await _setup_org_with_roles(client)
     resp = await client.post(
         "/api/v1/users",
-        json={"email": "x@test.com", "full_name": "X", "role": "viewer", "password": "password123"},
+        json={
+            "email": "x@test.com",
+            "full_name": "X",
+            "role": "viewer",
+            "password": "password123",
+        },
         headers=viewer_h,
     )
     assert resp.status_code == 403
@@ -147,9 +158,7 @@ async def test_admin_can_deactivate_user(client):
     users = (await client.get("/api/v1/users", headers=admin_h)).json()
     viewer_user = next(u for u in users if u["role"] == "viewer")
 
-    resp = await client.patch(
-        f"/api/v1/users/{viewer_user['id']}/deactivate", headers=admin_h
-    )
+    resp = await client.patch(f"/api/v1/users/{viewer_user['id']}/deactivate", headers=admin_h)
     assert resp.status_code == 200
     assert resp.json()["is_active"] is False
 
@@ -267,9 +276,7 @@ async def test_viewer_cannot_generate_interview_link(client):
     admin_h, _, viewer_h = await _setup_org_with_roles(client)
     job = (await client.post("/api/v1/job-postings", json=JOB_PAYLOAD, headers=admin_h)).json()
 
-    resp = await client.post(
-        f"/api/v1/job-postings/{job['id']}/generate-link", headers=viewer_h
-    )
+    resp = await client.post(f"/api/v1/job-postings/{job['id']}/generate-link", headers=viewer_h)
     assert resp.status_code == 403
 
 
@@ -278,9 +285,7 @@ async def test_hiring_manager_can_generate_interview_link(client):
     admin_h, hm_h, _ = await _setup_org_with_roles(client)
     job = (await client.post("/api/v1/job-postings", json=JOB_PAYLOAD, headers=admin_h)).json()
 
-    resp = await client.post(
-        f"/api/v1/job-postings/{job['id']}/generate-link", headers=hm_h
-    )
+    resp = await client.post(f"/api/v1/job-postings/{job['id']}/generate-link", headers=hm_h)
     assert resp.status_code == 200
     assert "token" in resp.json()
 
@@ -444,8 +449,6 @@ async def test_login_returns_correct_role_for_each_user(client):
         (INVITE_HM["email"], INVITE_HM["password"], "hiring_manager"),
         (INVITE_VIEWER["email"], INVITE_VIEWER["password"], "viewer"),
     ]:
-        resp = await client.post(
-            "/api/v1/auth/login", json={"email": email, "password": password}
-        )
+        resp = await client.post("/api/v1/auth/login", json={"email": email, "password": password})
         assert resp.status_code == 200
         assert resp.json()["role"] == expected_role

@@ -6,11 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from interviewbot.dependencies import get_db, get_org_id, require_role
-from interviewbot.models.schemas import (
-    InviteUserRequest,
-    UpdateUserRoleRequest,
-    UserResponse,
-)
+from interviewbot.models.schemas import InviteUserRequest, UpdateUserRoleRequest, UserResponse
 from interviewbot.models.tables import User
 
 router = APIRouter(prefix="/users", tags=["User Management"])
@@ -19,14 +15,12 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 @router.get("", response_model=list[UserResponse])
 async def list_users(
-    user: dict = Depends(require_role("admin")),  # noqa: B006
+    user: dict = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> list[UserResponse]:
     result = await db.execute(
-        select(User)
-        .where(User.org_id == org_id)
-        .order_by(User.created_at.desc())
+        select(User).where(User.org_id == org_id).order_by(User.created_at.desc())
     )
     users = result.scalars().all()
     return [_to_response(u) for u in users]
@@ -35,7 +29,7 @@ async def list_users(
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def invite_user(
     req: InviteUserRequest,
-    user: dict = Depends(require_role("admin")),  # noqa: B006
+    user: dict = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> UserResponse:
@@ -60,13 +54,11 @@ async def invite_user(
 async def update_user_role(
     user_id: UUID,
     req: UpdateUserRoleRequest,
-    user: dict = Depends(require_role("admin")),  # noqa: B006
+    user: dict = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> UserResponse:
-    result = await db.execute(
-        select(User).where(User.id == user_id, User.org_id == org_id)
-    )
+    result = await db.execute(select(User).where(User.id == user_id, User.org_id == org_id))
     target = result.scalar_one_or_none()
     if not target:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
@@ -83,13 +75,11 @@ async def update_user_role(
 @router.patch("/{user_id}/deactivate", response_model=UserResponse)
 async def deactivate_user(
     user_id: UUID,
-    user: dict = Depends(require_role("admin")),  # noqa: B006
+    user: dict = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> UserResponse:
-    result = await db.execute(
-        select(User).where(User.id == user_id, User.org_id == org_id)
-    )
+    result = await db.execute(select(User).where(User.id == user_id, User.org_id == org_id))
     target = result.scalar_one_or_none()
     if not target:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
@@ -105,7 +95,7 @@ async def deactivate_user(
 
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_profile(
-    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
     db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
     result = await db.execute(select(User).where(User.id == UUID(user["sub"])))

@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import json as json_mod
 
-import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import structlog
 
-from interviewbot.models.tables import CandidateReport, InterviewMessage, InterviewSession, JobPosting
-from interviewbot.services.ai_engine import (
-    AIEngine,
-    GENERAL_SCORING_PROMPT,
-    SWE_SCORING_PROMPT,
+from interviewbot.models.tables import (
+    CandidateReport,
+    InterviewMessage,
+    InterviewSession,
+    JobPosting,
 )
+from interviewbot.services.ai_engine import GENERAL_SCORING_PROMPT, SWE_SCORING_PROMPT, AIEngine
 
 logger = structlog.get_logger()
 

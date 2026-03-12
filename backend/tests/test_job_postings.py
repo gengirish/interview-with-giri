@@ -1,4 +1,5 @@
 """E2E tests for job posting CRUD and interview link generation."""
+
 import pytest
 
 from tests.conftest import JOB_PAYLOAD, SIGNUP_PAYLOAD

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import structlog
 import httpx
+import structlog
 
 logger = structlog.get_logger()
 
@@ -40,12 +40,14 @@ class GreenhouseAdapter(ATSAdapter):
             if score is not None:
                 # Greenhouse uses 1-4 rating scale
                 gh_rating = _to_greenhouse_rating(score)
-                attributes.append({
-                    "name": _format_dimension_name(dim_name),
-                    "type": "rating",
-                    "rating": gh_rating,
-                    "notes": dim_data.get("evidence", ""),
-                })
+                attributes.append(
+                    {
+                        "name": _format_dimension_name(dim_name),
+                        "type": "rating",
+                        "rating": gh_rating,
+                        "notes": dim_data.get("evidence", ""),
+                    }
+                )
 
         payload = {
             "overall_recommendation": _to_greenhouse_recommendation(
@@ -91,12 +93,14 @@ class LeverAdapter(ATSAdapter):
         for dim_name, dim_data in scorecard.get("skill_scores", {}).items():
             score = dim_data.get("score")
             if score is not None:
-                fields.append({
-                    "text": _format_dimension_name(dim_name),
-                    "code_text": dim_name,
-                    "value": str(round(score, 1)),
-                    "description": dim_data.get("evidence", ""),
-                })
+                fields.append(
+                    {
+                        "text": _format_dimension_name(dim_name),
+                        "code_text": dim_name,
+                        "value": str(round(score, 1)),
+                        "description": dim_data.get("evidence", ""),
+                    }
+                )
 
         strengths = scorecard.get("strengths", [])
         concerns = scorecard.get("concerns", [])
@@ -229,8 +233,7 @@ async def push_to_ats(platform: str, config: dict, scorecard: dict) -> dict:
     if not adapter_cls:
         return {
             "success": False,
-            "error": f"Unsupported ATS platform: {platform}. "
-            f"Supported: {', '.join(ATS_ADAPTERS)}",
+            "error": f"Unsupported ATS platform: {platform}. Supported: {', '.join(ATS_ADAPTERS)}",
         }
 
     adapter = adapter_cls()

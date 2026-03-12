@@ -1,4 +1,5 @@
 """E2E tests for auth guards, tenant isolation, and public endpoint access."""
+
 import pytest
 
 from tests.conftest import JOB_PAYLOAD
@@ -117,14 +118,14 @@ PROTECTED_ENDPOINTS = [
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("method,path", PROTECTED_ENDPOINTS)
+@pytest.mark.parametrize(("method", "path"), PROTECTED_ENDPOINTS)
 async def test_protected_endpoints_reject_no_auth(client, method, path):
     resp = await client.request(method, path)
     assert resp.status_code in (401, 403)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("method,path", PROTECTED_ENDPOINTS)
+@pytest.mark.parametrize(("method", "path"), PROTECTED_ENDPOINTS)
 async def test_protected_endpoints_reject_bad_token(client, method, path):
     headers = {"Authorization": "Bearer garbage.token.here"}
     resp = await client.request(method, path, headers=headers)
@@ -141,7 +142,7 @@ PUBLIC_ENDPOINTS = [
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("method,path", PUBLIC_ENDPOINTS)
+@pytest.mark.parametrize(("method", "path"), PUBLIC_ENDPOINTS)
 async def test_public_endpoints_need_no_auth(client, method, path):
     resp = await client.request(method, path)
     assert resp.status_code == 200

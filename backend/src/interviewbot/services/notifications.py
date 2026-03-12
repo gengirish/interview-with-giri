@@ -1,9 +1,9 @@
 """Email notification service for interview events."""
 
 import asyncio
-import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+import smtplib
 
 import structlog
 
@@ -15,8 +15,10 @@ logger = structlog.get_logger()
 def _build_html(subject: str, body_html: str) -> str:
     return f"""
     <html>
-    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0; background-color: #f8fafc;">
-        <div style="max-width: 560px; margin: 40px auto; background: white; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden;">
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        margin: 0; padding: 0; background-color: #f8fafc;">
+        <div style="max-width: 560px; margin: 40px auto; background: white; border-radius: 12px;
+            border: 1px solid #e2e8f0; overflow: hidden;">
             <div style="background: #4f46e5; padding: 24px 32px;">
                 <h1 style="color: white; margin: 0; font-size: 20px;">InterviewBot</h1>
             </div>
@@ -44,11 +46,13 @@ async def send_interview_invitation(
 ) -> bool:
     body = f"""
     <p style="color: #475569;">Hi {candidate_name},</p>
-    <p style="color: #475569;">You've been invited to interview for the position of <strong>{job_title}</strong> at <strong>{org_name}</strong>.</p>
+    <p style="color: #475569;">You've been invited to interview for the position of
+        <strong>{job_title}</strong> at <strong>{org_name}</strong>.</p>
     <p style="color: #475569;">Click the button below to begin your interview:</p>
     <div style="text-align: center; margin: 24px 0;">
         <a href="{interview_url}"
-           style="display: inline-block; background: #4f46e5; color: white; text-decoration: none; padding: 12px 32px; border-radius: 8px; font-weight: 600; font-size: 14px;">
+           style="display: inline-block; background: #4f46e5; color: white; text-decoration: none;
+           padding: 12px 32px; border-radius: 8px; font-weight: 600; font-size: 14px;">
             Start Interview
         </a>
     </div>
@@ -89,7 +93,8 @@ async def send_interview_completed(
     </table>
     <div style="text-align: center; margin: 24px 0;">
         <a href="{report_url}"
-           style="display: inline-block; background: #4f46e5; color: white; text-decoration: none; padding: 12px 32px; border-radius: 8px; font-weight: 600; font-size: 14px;">
+           style="display: inline-block; background: #4f46e5; color: white; text-decoration: none;
+           padding: 12px 32px; border-radius: 8px; font-weight: 600; font-size: 14px;">
             View Report
         </a>
     </div>

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import struct
 from dataclasses import dataclass, field
+import struct
 
 import structlog
 
@@ -13,6 +13,7 @@ logger = structlog.get_logger()
 @dataclass
 class AudioAnalysisResult:
     """Result of audio analysis for anti-cheat detection."""
+
     response_latencies_ms: list[float] = field(default_factory=list)
     avg_response_latency_ms: float = 0.0
     min_response_latency_ms: float = 0.0
@@ -47,14 +48,14 @@ def analyze_response_timing(latencies_ms: list[float]) -> AudioAnalysisResult:
 
     # Count suspiciously fast responses
     result.suspiciously_fast_responses = sum(
-        1 for l in latencies_ms if l < FAST_RESPONSE_THRESHOLD_MS
+        1 for latency_ms in latencies_ms if latency_ms < FAST_RESPONSE_THRESHOLD_MS
     )
 
     # Check response time consistency (humans vary; AI doesn't)
     if len(latencies_ms) >= 3:
         mean = result.avg_response_latency_ms
         variance = sum((x - mean) ** 2 for x in latencies_ms) / len(latencies_ms)
-        std_dev = variance ** 0.5
+        std_dev = variance**0.5
         coefficient_of_variation = std_dev / mean if mean > 0 else 0
 
         if coefficient_of_variation < UNNATURAL_CONSISTENCY_THRESHOLD:
@@ -93,7 +94,7 @@ def analyze_audio_energy(audio_bytes: bytes, sample_rate: int = 16000) -> dict:
     # Parse as 16-bit PCM samples
     try:
         num_samples = len(audio_bytes) // 2
-        samples = struct.unpack(f"<{num_samples}h", audio_bytes[:num_samples * 2])
+        samples = struct.unpack(f"<{num_samples}h", audio_bytes[: num_samples * 2])
     except struct.error:
         return {"silence_ratio": 0.0, "energy_spikes": 0, "flags": []}
 
@@ -106,7 +107,7 @@ def analyze_audio_energy(audio_bytes: bytes, sample_rate: int = 16000) -> dict:
     silence_threshold = 500  # RMS below this = silence
 
     for i in range(0, len(samples), window_size):
-        window = samples[i:i + window_size]
+        window = samples[i : i + window_size]
         if len(window) < window_size // 2:
             continue
         rms = (sum(s * s for s in window) / len(window)) ** 0.5

@@ -20,7 +20,7 @@ router = APIRouter(prefix="/reports", tags=["Reports"])
 @router.post("/{session_id}/generate", response_model=CandidateReportResponse)
 async def generate_report(
     session_id: UUID,
-    user: dict = Depends(require_role("admin", "hiring_manager")),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> CandidateReportResponse:
@@ -46,7 +46,7 @@ async def generate_report(
 @router.get("/{session_id}", response_model=CandidateReportResponse)
 async def get_report(
     session_id: UUID,
-    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> CandidateReportResponse:
@@ -73,7 +73,7 @@ async def get_report(
 @router.get("/{session_id}/export/json")
 async def export_report_json(
     session_id: UUID,
-    user: dict = Depends(require_role("admin", "hiring_manager")),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> dict:
@@ -130,7 +130,7 @@ async def export_report_json(
 @router.get("/{session_id}/export/csv")
 async def export_report_csv(
     session_id: UUID,
-    user: dict = Depends(require_role("admin", "hiring_manager")),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> StreamingResponse:

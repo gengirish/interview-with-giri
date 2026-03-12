@@ -1,8 +1,7 @@
-import secrets
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,12 +13,12 @@ from interviewbot.models.schemas import (
     PaginatedResponse,
 )
 from interviewbot.models.tables import InterviewMessage, InterviewSession, JobPosting
-from interviewbot.websocket.chat_handler import handle_text_interview
 
 router = APIRouter(prefix="/interviews", tags=["Interviews"])
 
 
 # --- Authenticated endpoints (dashboard) ---
+
 
 @router.get("", response_model=PaginatedResponse)
 async def list_interviews(
@@ -27,7 +26,7 @@ async def list_interviews(
     status_filter: str | None = Query(None, alias="status"),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
-    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> PaginatedResponse:
@@ -59,7 +58,7 @@ async def list_interviews(
 @router.get("/{session_id}", response_model=InterviewSessionResponse)
 async def get_interview(
     session_id: UUID,
-    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> InterviewSessionResponse:
@@ -78,7 +77,7 @@ async def get_interview(
 @router.get("/{session_id}/messages", response_model=list[InterviewMessageResponse])
 async def get_interview_messages(
     session_id: UUID,
-    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> list[InterviewMessageResponse]:
@@ -111,14 +110,13 @@ async def get_interview_messages(
 
 # --- Public endpoints (candidate-facing) ---
 
+
 @router.get("/public/{token}")
 async def get_public_interview(
     token: str,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    result = await db.execute(
-        select(InterviewSession).where(InterviewSession.token == token)
-    )
+    result = await db.execute(select(InterviewSession).where(InterviewSession.token == token))
     session = result.scalar_one_or_none()
     if not session:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Interview not found")
@@ -144,9 +142,7 @@ async def start_public_interview(
     req: InterviewStartRequest,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    result = await db.execute(
-        select(InterviewSession).where(InterviewSession.token == token)
-    )
+    result = await db.execute(select(InterviewSession).where(InterviewSession.token == token))
     session = result.scalar_one_or_none()
     if not session:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Interview not found")
@@ -157,7 +153,7 @@ async def start_public_interview(
     session.candidate_name = req.candidate_name
     session.candidate_email = req.candidate_email
     session.status = "in_progress"
-    session.started_at = datetime.now(timezone.utc)
+    session.started_at = datetime.now(UTC)
     await db.commit()
 
     return {

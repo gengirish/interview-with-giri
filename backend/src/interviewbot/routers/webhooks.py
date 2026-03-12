@@ -5,12 +5,12 @@ import hmac
 import json
 from uuid import UUID
 
-import httpx
-import structlog
 from fastapi import APIRouter, Depends
+import httpx
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import structlog
 
 from interviewbot.dependencies import get_db, get_org_id, require_role
 from interviewbot.models.tables import Organization
@@ -28,13 +28,11 @@ class WebhookConfig(BaseModel):
 
 @router.get("/config")
 async def get_webhook_config(
-    user: dict = Depends(require_role("admin")),  # noqa: B006
+    user: dict = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> dict:
-    result = await db.execute(
-        select(Organization).where(Organization.id == org_id)
-    )
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
     org = result.scalar_one_or_none()
     if not org:
         return {"webhooks": []}
@@ -46,13 +44,11 @@ async def get_webhook_config(
 @router.post("/config")
 async def update_webhook_config(
     config: WebhookConfig,
-    user: dict = Depends(require_role("admin")),  # noqa: B006
+    user: dict = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> dict:
-    result = await db.execute(
-        select(Organization).where(Organization.id == org_id)
-    )
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
     org = result.scalar_one_or_none()
     if not org:
         return {"error": "Organization not found"}
@@ -69,9 +65,7 @@ async def update_webhook_config(
 
 async def dispatch_webhook(org_id: str, event_type: str, payload: dict, db: AsyncSession) -> None:
     """Fire outbound webhooks for an organization."""
-    result = await db.execute(
-        select(Organization).where(Organization.id == org_id)
-    )
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
     org = result.scalar_one_or_none()
     if not org:
         return
@@ -95,7 +89,9 @@ async def dispatch_webhook(org_id: str, event_type: str, payload: dict, db: Asyn
             payload_json = json.dumps(body, separators=(",", ":"), sort_keys=True)
             secret = wh.get("secret", "")
             signature = (
-                hmac.new(secret.encode("utf-8"), payload_json.encode("utf-8"), hashlib.sha256).hexdigest()
+                hmac.new(
+                    secret.encode("utf-8"), payload_json.encode("utf-8"), hashlib.sha256
+                ).hexdigest()
                 if secret
                 else ""
             )

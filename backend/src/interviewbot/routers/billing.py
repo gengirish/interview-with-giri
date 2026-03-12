@@ -1,11 +1,10 @@
-import json
 from uuid import UUID
 
-import structlog
-import stripe
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+import stripe
+import structlog
 
 from interviewbot.config import get_settings
 from interviewbot.dependencies import get_db, get_org_id, require_role
@@ -43,7 +42,7 @@ PLAN_CONFIGS = {
 
 @router.get("/subscription", response_model=SubscriptionResponse)
 async def get_subscription(
-    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> SubscriptionResponse:
@@ -82,7 +81,7 @@ async def get_subscription(
 @router.post("/checkout")
 async def create_checkout(
     req: CheckoutRequest,
-    user: dict = Depends(require_role("admin")),  # noqa: B006
+    user: dict = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> dict:
@@ -95,27 +94,26 @@ async def create_checkout(
     if not plan:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid plan")
 
-    org_result = await db.execute(
-        select(Organization).where(Organization.id == org_id)
-    )
-    org = org_result.scalar_one_or_none()
-    org_name = org.name if org else "Organization"
+    org_result = await db.execute(select(Organization).where(Organization.id == org_id))
+    org_result.scalar_one_or_none()
 
     try:
         checkout_session = stripe.checkout.Session.create(
             mode="subscription",
-            line_items=[{
-                "price_data": {
-                    "currency": "usd",
-                    "product_data": {
-                        "name": f"InterviewBot {plan['name']}",
-                        "description": f"Up to {plan['interviews_limit']} interviews/month",
+            line_items=[
+                {
+                    "price_data": {
+                        "currency": "usd",
+                        "product_data": {
+                            "name": f"InterviewBot {plan['name']}",
+                            "description": f"Up to {plan['interviews_limit']} interviews/month",
+                        },
+                        "unit_amount": plan["price_monthly"],
+                        "recurring": {"interval": "month"},
                     },
-                    "unit_amount": plan["price_monthly"],
-                    "recurring": {"interval": "month"},
-                },
-                "quantity": 1,
-            }],
+                    "quantity": 1,
+                }
+            ],
             metadata={
                 "org_id": str(org_id),
                 "plan_id": req.plan_id,
@@ -127,7 +125,7 @@ async def create_checkout(
         return {"url": checkout_session.url}
     except stripe.StripeError as e:
         logger.error("stripe_checkout_error", error=str(e))
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Stripe error")
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Stripe error") from e
 
 
 @router.post("/webhook")
@@ -144,11 +142,9 @@ async def stripe_webhook(
     stripe.api_key = settings.stripe_secret_key
 
     try:
-        event = stripe.Webhook.construct_event(
-            payload, sig, settings.stripe_webhook_secret
-        )
+        event = stripe.Webhook.construct_event(payload, sig, settings.stripe_webhook_secret)
     except (ValueError, stripe.SignatureVerificationError):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid webhook signature")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid webhook signature") from None
 
     event_type = event["type"]
     data = event["data"]["object"]
@@ -162,9 +158,7 @@ async def stripe_webhook(
         if org_id and plan_id and stripe_sub_id:
             plan = PLAN_CONFIGS.get(plan_id, PLAN_CONFIGS["starter"])
             result = await db.execute(
-                select(Subscription).where(
-                    Subscription.stripe_subscription_id == stripe_sub_id
-                )
+                select(Subscription).where(Subscription.stripe_subscription_id == stripe_sub_id)
             )
             sub = result.scalar_one_or_none()
             if sub:
@@ -192,9 +186,7 @@ async def stripe_webhook(
     elif event_type == "customer.subscription.deleted":
         stripe_sub_id = data.get("id")
         result = await db.execute(
-            select(Subscription).where(
-                Subscription.stripe_subscription_id == stripe_sub_id
-            )
+            select(Subscription).where(Subscription.stripe_subscription_id == stripe_sub_id)
         )
         sub = result.scalar_one_or_none()
         if sub:
@@ -205,9 +197,7 @@ async def stripe_webhook(
     elif event_type == "invoice.payment_failed":
         stripe_sub_id = data.get("subscription")
         result = await db.execute(
-            select(Subscription).where(
-                Subscription.stripe_subscription_id == stripe_sub_id
-            )
+            select(Subscription).where(Subscription.stripe_subscription_id == stripe_sub_id)
         )
         sub = result.scalar_one_or_none()
         if sub:

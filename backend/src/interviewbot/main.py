@@ -1,11 +1,11 @@
 import traceback
 
-import structlog
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+import structlog
 
 from interviewbot.config import get_settings
 from interviewbot.middleware.tenant import TenantMiddleware

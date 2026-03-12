@@ -7,7 +7,6 @@ import uuid
 from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 import structlog
 
 from interviewbot.dependencies import get_db, get_org_id, require_role

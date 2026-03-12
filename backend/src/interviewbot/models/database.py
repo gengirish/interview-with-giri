@@ -20,6 +20,7 @@ def _make_connect_args(url: str) -> dict:  # type: ignore[type-arg]
 def _strip_sslmode(url: str) -> str:
     """Remove sslmode param from URL (asyncpg uses connect_args instead)."""
     import re
+
     return re.sub(r"[?&]sslmode=[^&]*", "", url)
 
 

@@ -1,9 +1,9 @@
 from jose import jwt
 from jose.exceptions import JWTError
-import structlog
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+import structlog
 
 from interviewbot.config import get_settings
 

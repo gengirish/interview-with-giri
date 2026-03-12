@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from interviewbot.dependencies import get_db
 from interviewbot.models.tables import InterviewSession
-from interviewbot.services.code_executor import ExecutionResult, execute_code
+from interviewbot.services.code_executor import execute_code
 
 router = APIRouter(prefix="/code", tags=["Code Execution"])
 

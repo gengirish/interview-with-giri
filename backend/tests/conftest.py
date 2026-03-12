@@ -1,17 +1,13 @@
+from collections.abc import AsyncGenerator
 import os
 import uuid
-from collections.abc import AsyncGenerator
 
-import pytest
-import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from jose import jwt
+import pytest
+import pytest_asyncio
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
-)
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from interviewbot.models.database import _make_connect_args, _strip_sslmode
 from interviewbot.models.tables import Base
@@ -40,9 +36,7 @@ def _get_test_engine():
 
 
 def _get_test_session_factory():
-    return async_sessionmaker(
-        _get_test_engine(), class_=AsyncSession, expire_on_commit=False
-    )
+    return async_sessionmaker(_get_test_engine(), class_=AsyncSession, expire_on_commit=False)
 
 
 def _truncate_sql() -> text:
@@ -69,7 +63,7 @@ async def setup_database():
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.drop_all)
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     await engine.dispose()
 
@@ -83,7 +77,7 @@ async def _cleanup_after_test():
         try:
             await session.execute(_truncate_sql())
             await session.commit()
-        except Exception:  # noqa: BLE001
+        except Exception:
             await session.rollback()
 
 
@@ -103,6 +97,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     app.dependency_overrides[get_db] = _override_get_db
 
     from interviewbot.routers.auth import limiter
+
     limiter.enabled = False
 
     transport = ASGITransport(app=app)

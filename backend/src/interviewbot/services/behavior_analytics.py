@@ -183,7 +183,7 @@ async def get_composite_integrity(
     # Layer in audio analysis if available
     if audio_analysis:
         audio_flags = audio_analysis.get("audio_flags", [])
-        speech_score = audio_analysis.get("speech_consistency_score", 10.0)
+        audio_analysis.get("speech_consistency_score", 10.0)
 
         # Weight audio signals
         if "unnaturally_consistent_timing" in audio_flags:
@@ -223,17 +223,26 @@ async def get_composite_integrity(
         "extended_away_time": "Significant time spent outside the interview window",
         "long_idle_period": "Extended period of inactivity",
         "no_typing_detected": "Code was submitted but no typing activity was recorded",
-        "unnaturally_consistent_timing": "Response timing was unnaturally consistent, suggesting AI assistance",
-        "majority_fast_responses": "Most responses were suspiciously fast for the question complexity",
-        "frequent_fast_responses": "Multiple responses came faster than typical human processing time",
+        "unnaturally_consistent_timing": (
+            "Response timing was unnaturally consistent, suggesting AI assistance"
+        ),
+        "majority_fast_responses": (
+            "Most responses were suspiciously fast for the question complexity"
+        ),
+        "frequent_fast_responses": (
+            "Multiple responses came faster than typical human processing time"
+        ),
         "very_low_avg_latency": "Average response time was below natural human threshold",
         "excessive_silence_in_audio": "Extended silence detected during audio responses",
-        "audio_energy_spikes": "Sudden audio volume changes detected, possible device switching",
+        "audio_energy_spikes": ("Sudden audio volume changes detected, possible device switching"),
     }
 
     flag_details = [flag_descriptions.get(f, f) for f in flags]
     if not flag_details:
-        assessment = "No suspicious behavior detected. Candidate appears to have completed the interview independently."
+        assessment = (
+            "No suspicious behavior detected. Candidate appears to have completed "
+            "the interview independently."
+        )
     else:
         assessment = f"Detected {len(flag_details)} behavioral flag(s): {'; '.join(flag_details)}."
 

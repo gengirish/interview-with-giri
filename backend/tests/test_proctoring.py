@@ -8,6 +8,7 @@ Tests cover:
 - RBAC on authenticated endpoints
 - Public endpoint access for candidates
 """
+
 import pytest
 
 from tests.conftest import JOB_PAYLOAD, SIGNUP_PAYLOAD
@@ -18,7 +19,10 @@ SIGNUP = {**SIGNUP_PAYLOAD, "email": "proctor@testcorp.com"}
 
 
 async def _setup_interview(client):
-    """Create org, job, generate link, start interview. Returns (admin_headers, session_id, token)."""
+    """Create org, job, generate link, start interview.
+
+    Returns (admin_headers, session_id, token).
+    """
     resp = await client.post("/api/v1/auth/signup", json=SIGNUP)
     admin_token = resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {admin_token}"}
@@ -211,10 +215,7 @@ async def test_integrity_with_suspicious_behavior(client):
     headers, session_id, token = await _setup_interview(client)
 
     # Submit many paste events to trigger flags
-    events = [
-        {"event_type": "paste", "data": {"content_length": 300}}
-        for _ in range(10)
-    ]
+    events = [{"event_type": "paste", "data": {"content_length": 300}} for _ in range(10)]
     # Also submit code without keystrokes
     events.append({"event_type": "code_submit", "data": {}})
     await client.post(f"/api/v1/proctoring/events/{token}/batch", json=events)
@@ -243,7 +244,11 @@ async def test_integrity_with_voice_timing_flags(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["integrity_score"] < 10.0
-    audio_flags = {"majority_fast_responses", "very_low_avg_latency", "unnaturally_consistent_timing"}
+    audio_flags = {
+        "majority_fast_responses",
+        "very_low_avg_latency",
+        "unnaturally_consistent_timing",
+    }
     assert any(f in data["flags"] for f in audio_flags)
 
 

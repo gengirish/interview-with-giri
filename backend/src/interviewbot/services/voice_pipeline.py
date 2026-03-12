@@ -1,7 +1,7 @@
 """Voice interview pipeline: STT (Whisper) -> LLM -> TTS (ElevenLabs)."""
 
+from collections.abc import AsyncIterator
 import io
-from typing import AsyncIterator
 
 import structlog
 
@@ -79,11 +79,13 @@ class ElevenLabsTTS:
             },
         }
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            async with client.stream("POST", url, json=payload, headers=headers) as response:
-                response.raise_for_status()
-                async for chunk in response.aiter_bytes(chunk_size=4096):
-                    yield chunk
+        async with (
+            httpx.AsyncClient(timeout=60.0) as client,
+            client.stream("POST", url, json=payload, headers=headers) as response,
+        ):
+            response.raise_for_status()
+            async for chunk in response.aiter_bytes(chunk_size=4096):
+                yield chunk
 
 
 class VoiceInterviewPipeline:

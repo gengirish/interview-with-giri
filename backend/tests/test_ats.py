@@ -6,10 +6,10 @@ Tests cover:
 - ATS push endpoint with mocked external API
 - Validation of platform names
 """
-import pytest
-from unittest.mock import AsyncMock, patch
 
-from tests.conftest import JOB_PAYLOAD, SIGNUP_PAYLOAD
+import pytest
+
+from tests.conftest import SIGNUP_PAYLOAD
 
 pytestmark = pytest.mark.smoke
 

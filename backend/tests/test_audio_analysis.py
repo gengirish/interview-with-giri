@@ -2,18 +2,15 @@
 
 Tests the pure analysis functions without any DB or HTTP dependencies.
 """
-import struct
 
-import pytest
+import struct
 
 from interviewbot.services.audio_analysis import (
     FAST_RESPONSE_THRESHOLD_MS,
     UNNATURAL_CONSISTENCY_THRESHOLD,
-    AudioAnalysisResult,
     analyze_audio_energy,
     analyze_response_timing,
 )
-
 
 # ────────────────────────────────────────
 #  analyze_response_timing
@@ -49,8 +46,14 @@ def test_all_fast_responses_flagged():
 
 def test_mixed_fast_and_normal_frequent_flag():
     latencies = [
-        400.0, 2500.0, 500.0, 3000.0,
-        600.0, 2000.0, 700.0, 2500.0,
+        400.0,
+        2500.0,
+        500.0,
+        3000.0,
+        600.0,
+        2000.0,
+        700.0,
+        2500.0,
     ]
     result = analyze_response_timing(latencies)
     fast_ratio = result.suspiciously_fast_responses / len(latencies)

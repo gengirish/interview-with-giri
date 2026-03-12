@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select, case, extract
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from interviewbot.dependencies import get_db, get_org_id, require_role
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 @router.get("/overview")
 async def analytics_overview(
-    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> dict:
@@ -98,12 +98,14 @@ async def analytics_overview(
 
 @router.get("/per-job")
 async def analytics_per_job(
-    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),  # noqa: B006
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> list[dict]:
     jobs_result = await db.execute(
-        select(JobPosting).where(JobPosting.org_id == org_id).order_by(JobPosting.created_at.desc())
+        select(JobPosting)
+        .where(JobPosting.org_id == org_id)
+        .order_by(JobPosting.created_at.desc())
     )
     jobs = jobs_result.scalars().all()
 
@@ -119,15 +121,19 @@ async def analytics_per_job(
         )
         stats = stats_result.one()
 
-        results.append({
-            "job_id": str(job.id),
-            "title": job.title,
-            "role_type": job.role_type,
-            "is_active": job.is_active,
-            "total_interviews": stats.total or 0,
-            "completed_interviews": stats.completed or 0,
-            "avg_score": round(float(stats.avg_score), 1) if stats.avg_score else None,
-            "avg_duration_minutes": round(float(stats.avg_duration) / 60, 1) if stats.avg_duration else None,
-        })
+        results.append(
+            {
+                "job_id": str(job.id),
+                "title": job.title,
+                "role_type": job.role_type,
+                "is_active": job.is_active,
+                "total_interviews": stats.total or 0,
+                "completed_interviews": stats.completed or 0,
+                "avg_score": round(float(stats.avg_score), 1) if stats.avg_score else None,
+                "avg_duration_minutes": round(float(stats.avg_duration) / 60, 1)
+                if stats.avg_duration
+                else None,
+            }
+        )
 
     return results

@@ -1,33 +1,33 @@
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
 
-
 # --- Enums ---
 
-class InterviewFormat(str, Enum):
+
+class InterviewFormat(StrEnum):
     TEXT = "text"
     VOICE = "voice"
     VIDEO = "video"
 
 
-class RoleType(str, Enum):
+class RoleType(StrEnum):
     TECHNICAL = "technical"
     NON_TECHNICAL = "non_technical"
     MIXED = "mixed"
 
 
-class UserRole(str, Enum):
+class UserRole(StrEnum):
     ADMIN = "admin"
     HIRING_MANAGER = "hiring_manager"
     VIEWER = "viewer"
 
 
-class SessionStatus(str, Enum):
+class SessionStatus(StrEnum):
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -35,13 +35,14 @@ class SessionStatus(str, Enum):
     DISCONNECTED = "disconnected"
 
 
-class Recommendation(str, Enum):
+class Recommendation(StrEnum):
     STRONG_HIRE = "strong_hire"
     HIRE = "hire"
     NO_HIRE = "no_hire"
 
 
 # --- Auth ---
+
 
 class SignupRequest(BaseModel):
     org_name: str = Field(..., min_length=2, max_length=255)
@@ -65,6 +66,7 @@ class TokenResponse(BaseModel):
 
 # --- Organizations ---
 
+
 class OrganizationResponse(BaseModel):
     id: UUID
     name: str
@@ -74,6 +76,7 @@ class OrganizationResponse(BaseModel):
 
 
 # --- Job Postings ---
+
 
 class InterviewConfig(BaseModel):
     num_questions: int = Field(10, ge=3, le=30)
@@ -123,6 +126,7 @@ class PaginatedResponse(BaseModel):
 
 # --- Interviews ---
 
+
 class InterviewStartRequest(BaseModel):
     candidate_name: str = Field(..., min_length=2, max_length=255)
     candidate_email: EmailStr
@@ -153,6 +157,7 @@ class InterviewMessageResponse(BaseModel):
 
 # --- Reports ---
 
+
 class DimensionalScore(BaseModel):
     score: float | None = None
     evidence: str = ""
@@ -175,12 +180,14 @@ class SWEScorecard(BaseModel):
 
 class SkillScore(BaseModel):
     """Legacy format; use DimensionalScore for new reports."""
+
     score: float = Field(..., ge=0.0, le=10.0)
     evidence: str
 
 
 class BehavioralScore(BaseModel):
     """Legacy format; use DimensionalScore for new reports."""
+
     score: float = Field(..., ge=0.0, le=10.0)
     evidence: str
 
@@ -205,6 +212,7 @@ class CandidateReportResponse(BaseModel):
 
 # --- Billing ---
 
+
 class SubscriptionResponse(BaseModel):
     plan_tier: str
     interviews_limit: int
@@ -223,6 +231,7 @@ class CheckoutRequest(BaseModel):
 
 # --- Dashboard ---
 
+
 class DashboardStats(BaseModel):
     total_interviews: int
     completed_interviews: int
@@ -233,6 +242,7 @@ class DashboardStats(BaseModel):
 
 
 # --- User Management ---
+
 
 class InviteUserRequest(BaseModel):
     email: EmailStr
@@ -255,6 +265,7 @@ class UpdateUserRoleRequest(BaseModel):
 
 
 # --- Behavior Analytics / Proctoring ---
+
 
 class BehaviorEventCreate(BaseModel):
     event_type: str = Field(
@@ -295,6 +306,7 @@ class IntegrityAssessment(BaseModel):
 
 
 # --- ATS Integration ---
+
 
 class ATSConfig(BaseModel):
     platform: str = Field(..., pattern="^(greenhouse|lever|workable)$")
