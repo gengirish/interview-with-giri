@@ -220,7 +220,7 @@ export default function ComparePage() {
         .slice(0, Math.min(5, candidates.length))
         .map((c) => c.session_id);
     }
-    const uniqueIds = [...new Set(selectedIds)].slice(0, 5);
+    const uniqueIds = Array.from(new Set(selectedIds)).slice(0, 5);
     if (uniqueIds.length < 2) {
       toast.error("Need at least 2 candidates for a debrief");
       return;
