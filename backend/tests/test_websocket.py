@@ -1,23 +1,41 @@
 """WebSocket tests for text interview flow.
 
 Uses starlette.testclient.TestClient for synchronous WebSocket testing.
-Sets up test data via HTTP endpoints, then tests WebSocket behavior.
+Creates its own DB engine to avoid event loop conflicts with pytest-asyncio.
 """
 
+import os
 from unittest.mock import AsyncMock, patch
 
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from starlette.testclient import TestClient
 
-from tests.conftest import JOB_PAYLOAD, SIGNUP_PAYLOAD, _get_test_session_factory
+from interviewbot.models.database import _make_connect_args, _strip_sslmode
+from tests.conftest import JOB_PAYLOAD, SIGNUP_PAYLOAD
 
 
-def _make_app():
-    """Create app with test DB override and rate limiter disabled."""
+def _ws_engine_and_factory():
+    """Create a standalone engine+factory for WebSocket tests (own event loop)."""
+    url = (
+        os.getenv("TEST_DATABASE_URL")
+        or os.getenv("DATABASE_URL")
+        or "postgresql+asyncpg://postgres:changeme@localhost:5433/interviewbot"
+    )
+    engine = create_async_engine(
+        _strip_sslmode(url),
+        echo=False,
+        pool_size=2,
+        connect_args=_make_connect_args(url),
+    )
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    return engine, factory
+
+
+def _make_app(factory):
+    """Create app with given session factory and rate limiter disabled."""
     from interviewbot.dependencies import get_db
     from interviewbot.main import create_app
     from interviewbot.routers.auth import limiter
-
-    factory = _get_test_session_factory()
 
     async def _override_get_db():
         async with factory() as session:
@@ -58,14 +76,13 @@ def _setup_interview(tc: TestClient, num_questions: int = 10) -> str:
         json={"candidate_name": "WS Tester", "candidate_email": "ws@test.com"},
     )
     assert start_resp.status_code == 200
-
     return token
 
 
 def test_ws_invalid_token() -> None:
     """Connect with nonexistent token, expect error message."""
-    app = _make_app()
-    factory = _get_test_session_factory()
+    _, factory = _ws_engine_and_factory()
+    app = _make_app(factory)
 
     with (
         patch(
@@ -82,8 +99,8 @@ def test_ws_invalid_token() -> None:
 
 def test_ws_receives_first_question() -> None:
     """Create valid session, mock AIEngine, verify first question is received."""
-    app = _make_app()
-    factory = _get_test_session_factory()
+    _, factory = _ws_engine_and_factory()
+    app = _make_app(factory)
 
     first_q = "Tell me about your experience with FastAPI."
     mock_chat = AsyncMock(return_value=first_q)
@@ -97,9 +114,7 @@ def test_ws_receives_first_question() -> None:
     ):
         token = _setup_interview(tc)
 
-        with (
-            patch("interviewbot.websocket.chat_handler.AIEngine") as mock_cls,
-        ):
+        with patch("interviewbot.websocket.chat_handler.AIEngine") as mock_cls:
             mock_engine = AsyncMock()
             mock_engine.chat = mock_chat
             mock_cls.return_value = mock_engine
@@ -113,8 +128,8 @@ def test_ws_receives_first_question() -> None:
 
 def test_ws_send_message_get_response() -> None:
     """Send a candidate message, verify AI follow-up response."""
-    app = _make_app()
-    factory = _get_test_session_factory()
+    _, factory = _ws_engine_and_factory()
+    app = _make_app(factory)
 
     first_q = "What is your Python experience?"
     follow_up = "How do you handle async operations?"
@@ -154,8 +169,8 @@ def test_ws_send_message_get_response() -> None:
 
 def test_ws_interview_ends_after_max_questions() -> None:
     """With num_questions=2, interview ends after 2 AI responses."""
-    app = _make_app()
-    factory = _get_test_session_factory()
+    _, factory = _ws_engine_and_factory()
+    app = _make_app(factory)
 
     first_q = "What is Python?"
     end_msg = "Thank you for your time."
