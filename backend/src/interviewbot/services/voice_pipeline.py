@@ -177,9 +177,7 @@ class VoiceInterviewPipeline:
 
     async def process_audio(self, audio_bytes: bytes, format: str = "webm") -> str:
         if not self.stt:
-            raise RuntimeError(
-                "STT not configured. Set GEMINI_API_KEY or OPENAI_API_KEY."
-            )
+            raise RuntimeError("STT not configured. Set GEMINI_API_KEY or OPENAI_API_KEY.")
         transcript = await self.stt.transcribe(audio_bytes, format)
         logger.info("stt_transcribed", length=len(transcript))
         return transcript
