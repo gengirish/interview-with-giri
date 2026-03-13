@@ -152,11 +152,17 @@ async def _send_email(
         msg.attach(MIMEText(html, "html"))
 
         def _send_sync() -> None:
-            with smtplib.SMTP(smtp_host, smtp_port) as server:
-                server.starttls()
-                if smtp_user:
-                    server.login(smtp_user, smtp_password)
-                server.sendmail(from_email, [to_email], msg.as_string())
+            if smtp_port == 465:
+                with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+                    if smtp_user:
+                        server.login(smtp_user, smtp_password)
+                    server.sendmail(from_email, [to_email], msg.as_string())
+            else:
+                with smtplib.SMTP(smtp_host, smtp_port) as server:
+                    server.starttls()
+                    if smtp_user:
+                        server.login(smtp_user, smtp_password)
+                    server.sendmail(from_email, [to_email], msg.as_string())
 
         await asyncio.to_thread(_send_sync)
 
