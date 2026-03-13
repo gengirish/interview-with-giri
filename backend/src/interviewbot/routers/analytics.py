@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from interviewbot.dependencies import get_db, get_org_id, require_role
 from interviewbot.models.schemas import AnalyticsOverviewResponse, JobAnalyticsResponse
-from interviewbot.models.tables import CandidateReport, InterviewSession, JobPosting
+from interviewbot.models.tables import CandidateFeedback, CandidateReport, InterviewSession, JobPosting
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
@@ -232,6 +232,76 @@ async def compare_candidates(
         }
         for r in rows
     ]
+
+
+@router.get("/candidate-satisfaction")
+async def get_candidate_satisfaction(
+    job_id: str | None = Query(None),
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
+    db: AsyncSession = Depends(get_db),
+    org_id: UUID = Depends(get_org_id),
+):
+    """Get aggregated candidate feedback (NPS) stats."""
+    query = (
+        select(CandidateFeedback, InterviewSession)
+        .join(InterviewSession, InterviewSession.id == CandidateFeedback.session_id)
+        .where(InterviewSession.org_id == org_id)
+    )
+    if job_id:
+        query = query.where(InterviewSession.job_posting_id == UUID(job_id))
+
+    result = await db.execute(query)
+    rows = result.all()
+
+    if not rows:
+        return {
+            "total_responses": 0,
+            "avg_overall": None,
+            "avg_fairness": None,
+            "avg_clarity": None,
+            "avg_relevance": None,
+            "nps_score": None,
+            "rating_distribution": {},
+            "recent_comments": [],
+        }
+
+    overalls = [r.overall_rating for r, _ in rows]
+    fairness = [r.fairness_rating for r, _ in rows if r.fairness_rating is not None]
+    clarity = [r.clarity_rating for r, _ in rows if r.clarity_rating is not None]
+    relevance = [r.relevance_rating for r, _ in rows if r.relevance_rating is not None]
+
+    dist: dict[str, int] = {}
+    for r, _ in rows:
+        k = str(r.overall_rating)
+        dist[k] = dist.get(k, 0) + 1
+
+    nps_promoters = sum(1 for r, _ in rows if r.overall_rating >= 4)
+    nps_detractors = sum(1 for r, _ in rows if r.overall_rating <= 2)
+    nps_score = round((nps_promoters - nps_detractors) / len(rows) * 100) if rows else None
+
+    recent = [
+        {
+            "comment": r.comment or "",
+            "rating": r.overall_rating,
+            "created_at": str(r.created_at) if r.created_at else "",
+        }
+        for r, _ in sorted(
+            [(r, s) for r, s in rows if (r.comment or "").strip()],
+            key=lambda x: x[0].created_at or datetime.min.replace(tzinfo=UTC),
+            reverse=True,
+        )[:10]
+    ]
+
+    return {
+        "total_responses": len(rows),
+        "avg_overall": round(sum(overalls) / len(overalls), 2) if overalls else None,
+        "avg_fairness": round(sum(fairness) / len(fairness), 2) if fairness else None,
+        "avg_clarity": round(sum(clarity) / len(clarity), 2) if clarity else None,
+        "avg_relevance": round(sum(relevance) / len(relevance), 2) if relevance else None,
+        "nps_score": nps_score,
+        "rating_distribution": dist,
+        "recent_comments": recent,
+    }
 
 
 @router.get("/skills-insights")
