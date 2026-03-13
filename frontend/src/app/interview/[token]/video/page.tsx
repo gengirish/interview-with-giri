@@ -12,6 +12,10 @@ import {
   Clock,
   AlertTriangle,
   CheckCircle,
+  Send,
+  Code2,
+  MessageSquare,
+  Keyboard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { InterviewPhase } from "@/lib/types";
@@ -34,6 +38,11 @@ export default function VideoInterviewPage() {
   const [elapsed, setElapsed] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
+  const [chatMessage, setChatMessage] = useState("");
+  const [showCodeInput, setShowCodeInput] = useState(false);
+  const [codeSnippet, setCodeSnippet] = useState("");
+  const [codeLanguage, setCodeLanguage] = useState("javascript");
+  const [inputMode, setInputMode] = useState<"voice" | "text">("voice");
 
   const wsRef = useRef<WebSocket | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -203,6 +212,25 @@ export default function VideoInterviewPage() {
       recorder.start();
       setIsRecording(true);
     }
+  }
+
+  function sendTextMessage(e: React.FormEvent) {
+    e.preventDefault();
+    const text = chatMessage.trim();
+    if (!text || !wsRef.current || thinking) return;
+    setTranscript((t) => [...t, { role: "candidate", content: text }]);
+    wsRef.current.send(JSON.stringify({ type: "message", content: text }));
+    setChatMessage("");
+  }
+
+  function sendCodeSnippet() {
+    const code = codeSnippet.trim();
+    if (!code || !wsRef.current || thinking) return;
+    const formatted = `[Code Submission]\n\`\`\`${codeLanguage}\n${code}\n\`\`\``;
+    setTranscript((t) => [...t, { role: "candidate", content: formatted }]);
+    wsRef.current.send(JSON.stringify({ type: "message", content: formatted }));
+    setCodeSnippet("");
+    setShowCodeInput(false);
   }
 
   function toggleMute() {
@@ -423,17 +451,43 @@ export default function VideoInterviewPage() {
               </button>
             </div>
             <p className="mt-2 text-center text-xs text-slate-400">
-              {isRecording ? "Recording... Click to send" : "Click mic to answer"}
+              {inputMode === "voice"
+                ? isRecording
+                  ? "Recording... Click to send"
+                  : "Click mic to answer"
+                : "Using text input below"}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Transcript */}
+      {/* Transcript + Chat Input */}
       <div className="flex flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
           <div className="text-sm font-semibold text-white">{jobTitle}</div>
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setInputMode(inputMode === "voice" ? "text" : "voice")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                inputMode === "text"
+                  ? "bg-indigo-600/20 text-indigo-400 border border-indigo-500/30"
+                  : "bg-slate-800 text-slate-400 hover:text-white border border-slate-700",
+              )}
+              aria-label={inputMode === "voice" ? "Switch to text input" : "Switch to voice input"}
+            >
+              {inputMode === "voice" ? (
+                <>
+                  <Keyboard className="h-3 w-3" />
+                  Type
+                </>
+              ) : (
+                <>
+                  <Mic className="h-3 w-3" />
+                  Voice
+                </>
+              )}
+            </button>
             <div className="flex items-center gap-1.5 text-xs text-slate-400">
               <Clock className="h-3.5 w-3.5" />
               {formatTime(elapsed)}
@@ -462,7 +516,7 @@ export default function VideoInterviewPage() {
             >
               <div
                 className={cn(
-                  "max-w-[85%] rounded-2xl px-4 py-3 text-sm",
+                  "max-w-[85%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap",
                   entry.role === "candidate"
                     ? "bg-indigo-600 text-white rounded-br-sm"
                     : "bg-slate-800 text-slate-200 rounded-bl-sm",
@@ -485,6 +539,140 @@ export default function VideoInterviewPage() {
           )}
           <div ref={transcriptEndRef} />
         </div>
+
+        {/* Code snippet panel */}
+        {showCodeInput && (
+          <div className="border-t border-slate-800 bg-slate-900/80 px-4 py-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Code2 className="h-4 w-4 text-indigo-400" />
+                <span className="text-xs font-medium text-slate-300">Code Snippet</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={codeLanguage}
+                  onChange={(e) => setCodeLanguage(e.target.value)}
+                  className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-300 outline-none focus:border-indigo-500"
+                  aria-label="Code language"
+                >
+                  <option value="javascript">JavaScript</option>
+                  <option value="typescript">TypeScript</option>
+                  <option value="python">Python</option>
+                  <option value="java">Java</option>
+                  <option value="cpp">C++</option>
+                  <option value="go">Go</option>
+                  <option value="rust">Rust</option>
+                  <option value="sql">SQL</option>
+                </select>
+                <button
+                  onClick={() => setShowCodeInput(false)}
+                  className="text-xs text-slate-500 hover:text-slate-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+            <textarea
+              value={codeSnippet}
+              onChange={(e) => setCodeSnippet(e.target.value)}
+              placeholder="Paste or type your code here..."
+              rows={6}
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm text-green-400 placeholder-slate-600 outline-none focus:border-indigo-500 resize-none"
+              onKeyDown={(e) => {
+                if (e.key === "Tab") {
+                  e.preventDefault();
+                  const start = e.currentTarget.selectionStart;
+                  const end = e.currentTarget.selectionEnd;
+                  const val = codeSnippet;
+                  setCodeSnippet(val.substring(0, start) + "  " + val.substring(end));
+                  setTimeout(() => {
+                    e.currentTarget.selectionStart = e.currentTarget.selectionEnd = start + 2;
+                  }, 0);
+                }
+              }}
+            />
+            <div className="mt-2 flex justify-end">
+              <button
+                onClick={sendCodeSnippet}
+                disabled={!codeSnippet.trim() || thinking}
+                className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+              >
+                <Send className="h-3 w-3" />
+                Submit Code
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Text input bar */}
+        {inputMode === "text" && (
+          <div className="border-t border-slate-800 bg-slate-900/50 px-4 py-3">
+            <form onSubmit={sendTextMessage} className="flex items-end gap-2">
+              <div className="flex-1">
+                <textarea
+                  value={chatMessage}
+                  onChange={(e) => setChatMessage(e.target.value)}
+                  placeholder="Type your answer..."
+                  rows={2}
+                  disabled={thinking}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-indigo-500 resize-none disabled:opacity-50"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      sendTextMessage(e);
+                    }
+                  }}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setShowCodeInput(!showCodeInput)}
+                  className={cn(
+                    "rounded-lg p-2.5 transition-colors",
+                    showCodeInput
+                      ? "bg-indigo-600 text-white"
+                      : "bg-slate-700 text-slate-300 hover:bg-slate-600 hover:text-white",
+                  )}
+                  aria-label="Toggle code editor"
+                  title="Share code snippet"
+                >
+                  <Code2 className="h-4 w-4" />
+                </button>
+                <button
+                  type="submit"
+                  disabled={!chatMessage.trim() || thinking}
+                  className="rounded-lg bg-indigo-600 p-2.5 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                  aria-label="Send message"
+                >
+                  <Send className="h-4 w-4" />
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Voice mode hint with code button */}
+        {inputMode === "voice" && (
+          <div className="border-t border-slate-800 bg-slate-900/30 px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <MessageSquare className="h-3.5 w-3.5" />
+              <span>Use the mic on the left to answer, or switch to text mode to type</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setInputMode("text");
+                setShowCodeInput(true);
+              }}
+              className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors border border-slate-700"
+              aria-label="Share code snippet"
+            >
+              <Code2 className="h-3 w-3" />
+              Share Code
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
