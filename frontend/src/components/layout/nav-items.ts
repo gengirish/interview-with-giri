@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Briefcase,
+  FileText,
   MessageSquare,
   Settings,
   LayoutDashboard,
@@ -19,6 +20,7 @@ export const navItems: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Jobs", href: "/dashboard/jobs", icon: Briefcase },
   { label: "Interviews", href: "/dashboard/interviews", icon: MessageSquare },
+  { label: "Reports", href: "/dashboard/reports", icon: FileText },
   { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
   {
     label: "Team",

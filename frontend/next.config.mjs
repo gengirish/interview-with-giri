@@ -1,3 +1,5 @@
+import { withSentryConfig } from "@sentry/nextjs";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // "standalone" for Docker; remove/comment for Vercel deployment
@@ -50,4 +52,7 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+const finalConfig = process.env.NEXT_PUBLIC_SENTRY_DSN
+  ? withSentryConfig(nextConfig, { silent: true })
+  : nextConfig;
+export default finalConfig;

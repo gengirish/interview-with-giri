@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { api, type SubscriptionInfo } from "@/lib/api";
+import { api, type SubscriptionInfo, type BillingPlan, type WebhookConfig } from "@/lib/api";
 import {
   Loader2,
   CreditCard,
@@ -17,6 +17,10 @@ export default function SettingsPage() {
   const [sub, setSub] = useState<SubscriptionInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("billing");
+  const [billingPlans, setBillingPlans] = useState<BillingPlan[] | null>(null);
+  const [billingPlansLoading, setBillingPlansLoading] = useState(true);
+  const [webhooks, setWebhooks] = useState<WebhookConfig[]>([]);
+  const [webhooksLoading, setWebhooksLoading] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState("");
   const [webhookSaved, setWebhookSaved] = useState(false);
   const [atsConfigs, setAtsConfigs] = useState<
@@ -79,6 +83,26 @@ export default function SettingsPage() {
     }
   }, [activeTab]);
 
+  useEffect(() => {
+    setBillingPlansLoading(true);
+    api
+      .getBillingPlans()
+      .then(setBillingPlans)
+      .catch(() => {
+        setBillingPlans(null);
+      })
+      .finally(() => setBillingPlansLoading(false));
+  }, []);
+
+  useEffect(() => {
+    setWebhooksLoading(true);
+    api
+      .getWebhookConfig()
+      .then((res) => setWebhooks(res.webhooks || []))
+      .catch(() => setWebhooks([]))
+      .finally(() => setWebhooksLoading(false));
+  }, []);
+
   async function handleUpgrade(planId: string) {
     try {
       const res = await api.createCheckout(planId);
@@ -92,11 +116,13 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!webhookUrl) return;
     try {
-      await api.addWebhookConfig({
+      const res = await api.addWebhookConfig({
         url: webhookUrl,
         events: ["interview.completed", "interview.scored"],
         secret: "",
       });
+      setWebhooks(res.webhooks || []);
+      setWebhookUrl("");
       setWebhookSaved(true);
       setTimeout(() => setWebhookSaved(false), 3000);
     } catch (err) {
@@ -230,45 +256,67 @@ export default function SettingsPage() {
 
           {/* Upgrade Plans */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            {[
-              {
-                id: "starter",
-                name: "Starter",
-                price: "$99",
-                features: [
-                  "50 interviews/month",
-                  "Text interviews",
-                  "2 team members",
-                  "Basic analytics",
-                ],
-              },
-              {
-                id: "professional",
-                name: "Professional",
-                price: "$299",
-                popular: true,
-                features: [
-                  "200 interviews/month",
-                  "Text + Voice interviews",
-                  "10 team members",
-                  "Full analytics",
-                  "API access",
-                ],
-              },
-              {
-                id: "enterprise",
-                name: "Enterprise",
-                price: "$799",
-                features: [
-                  "Unlimited interviews",
-                  "All formats (Text, Voice, Video)",
-                  "Unlimited team members",
-                  "Custom branding",
-                  "Priority support",
-                  "SSO",
-                ],
-              },
-            ].map((plan) => (
+            {billingPlansLoading ? (
+              <div className="col-span-full flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+              </div>
+            ) : (
+              (billingPlans && billingPlans.length > 0
+                ? billingPlans.map((p) => ({
+                    id: p.id,
+                    name: p.name,
+                    price: `$${p.price_monthly}`,
+                    popular: p.id === "professional",
+                    features: [
+                      `${p.interviews_limit === -1 ? "Unlimited" : p.interviews_limit} interviews/month`,
+                      p.allowed_formats?.length
+                        ? `${p.allowed_formats.join(", ")} interviews`
+                        : "Text interviews",
+                      `${p.max_users} team members`,
+                    ],
+                  }))
+                : [
+                    {
+                      id: "starter",
+                      name: "Starter",
+                      price: "$99",
+                      popular: false,
+                      features: [
+                        "50 interviews/month",
+                        "Text interviews",
+                        "2 team members",
+                        "Basic analytics",
+                      ],
+                    },
+                    {
+                      id: "professional",
+                      name: "Professional",
+                      price: "$299",
+                      popular: true,
+                      features: [
+                        "200 interviews/month",
+                        "Text + Voice interviews",
+                        "10 team members",
+                        "Full analytics",
+                        "API access",
+                      ],
+                    },
+                    {
+                      id: "enterprise",
+                      name: "Enterprise",
+                      price: "$799",
+                      popular: false,
+                      features: [
+                        "Unlimited interviews",
+                        "All formats (Text, Voice, Video)",
+                        "Unlimited team members",
+                        "Custom branding",
+                        "Priority support",
+                        "SSO",
+                      ],
+                    },
+                  ]
+              ).map((plan) => (
               <div
                 key={plan.id}
                 className={cn(
@@ -318,7 +366,8 @@ export default function SettingsPage() {
                   {sub.plan_tier === plan.id ? "Current Plan" : "Upgrade"}
                 </button>
               </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       )}
@@ -331,7 +380,38 @@ export default function SettingsPage() {
           <p className="mt-1 text-sm text-slate-500">
             Get notified when interview events occur.
           </p>
-          <form onSubmit={handleSaveWebhook} className="mt-4 space-y-4">
+
+          {webhooksLoading ? (
+            <div className="mt-4 flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+            </div>
+          ) : webhooks.length > 0 ? (
+            <div className="mt-4 space-y-3">
+              <h4 className="text-xs font-medium text-slate-600 uppercase tracking-wider">
+                Existing Webhooks
+              </h4>
+              <ul className="space-y-2">
+                {webhooks.map((wh, idx) => (
+                  <li
+                    key={idx}
+                    className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+                  >
+                    <p className="text-sm font-medium text-slate-900 truncate">
+                      {wh.url}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Events: {wh.events?.join(", ") || "—"}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <h4 className="mt-6 text-xs font-medium text-slate-600 uppercase tracking-wider">
+            Add Webhook
+          </h4>
+          <form onSubmit={handleSaveWebhook} className="mt-3 space-y-4">
             <div>
               <label htmlFor="webhook-url" className="block text-sm font-medium text-slate-700 mb-1">
                 Webhook URL

@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from pydantic import ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from interviewbot.dependencies import get_db, get_org_id, require_role
@@ -62,11 +62,29 @@ async def create_job_posting(
 async def list_job_postings(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
+    q: str | None = Query(None),
+    is_active: bool | None = Query(None),
+    role_type: str | None = Query(None),
+    interview_format: str | None = Query(None),
     user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> PaginatedResponse:
     base_query = select(JobPosting).where(JobPosting.org_id == org_id)
+
+    if q:
+        base_query = base_query.where(
+            or_(
+                JobPosting.title.ilike(f"%{q}%"),
+                JobPosting.job_description.ilike(f"%{q}%"),
+            )
+        )
+    if is_active is not None:
+        base_query = base_query.where(JobPosting.is_active == is_active)
+    if role_type:
+        base_query = base_query.where(JobPosting.role_type == role_type)
+    if interview_format:
+        base_query = base_query.where(JobPosting.interview_format == interview_format)
 
     count_result = await db.execute(select(func.count()).select_from(base_query.subquery()))
     total = count_result.scalar() or 0

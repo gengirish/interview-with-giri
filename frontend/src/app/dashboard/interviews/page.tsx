@@ -10,6 +10,7 @@ import {
   XCircle,
   AlertCircle,
   Eye,
+  X,
 } from "lucide-react";
 import { cn, formatDuration, formatDate } from "@/lib/utils";
 import Link from "next/link";
@@ -50,8 +51,12 @@ export default function InterviewsPage() {
   const [sessions, setSessions] = useState<InterviewSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [candidateName, setCandidateName] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -59,6 +64,9 @@ export default function InterviewsPage() {
         page,
         undefined,
         statusFilter || undefined,
+        candidateName.trim() || undefined,
+        dateFrom || undefined,
+        dateTo || undefined,
       );
       setSessions(res.items);
       setTotal(res.total);
@@ -67,7 +75,20 @@ export default function InterviewsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter]);
+  }, [page, statusFilter, candidateName, dateFrom, dateTo]);
+
+  async function handleCancelInterview(sessionId: string) {
+    setCancellingId(sessionId);
+    try {
+      await api.cancelInterview(sessionId);
+      toast.success("Interview cancelled");
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to cancel interview");
+    } finally {
+      setCancellingId(null);
+    }
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -90,6 +111,44 @@ export default function InterviewsPage() {
           <p className="text-sm text-slate-500 mt-1">
             {total} total interview sessions
           </p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
+        <input
+          placeholder="Search by candidate name..."
+          value={candidateName}
+          onChange={(e) => {
+            setCandidateName(e.target.value);
+            setPage(1);
+          }}
+          className="flex-1 min-w-[180px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+        />
+        <div className="flex items-center gap-2">
+          <label htmlFor="date-from" className="text-sm text-slate-600 whitespace-nowrap">From</label>
+          <input
+            id="date-from"
+            type="date"
+            value={dateFrom}
+            onChange={(e) => {
+              setDateFrom(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label htmlFor="date-to" className="text-sm text-slate-600 whitespace-nowrap">To</label>
+          <input
+            id="date-to"
+            type="date"
+            value={dateTo}
+            onChange={(e) => {
+              setDateTo(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+          />
         </div>
         <select
           value={statusFilter}
@@ -198,15 +257,31 @@ export default function InterviewsPage() {
                       {formatDate(s.created_at)}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {s.status === "completed" && (
-                        <Link
-                          href={`/dashboard/interviews/${s.id}`}
-                          className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-                        >
-                          <Eye className="h-3 w-3" />
-                          View
-                        </Link>
-                      )}
+                      <div className="flex items-center justify-end gap-1.5">
+                        {(s.status === "pending" || s.status === "in_progress") && (
+                          <button
+                            onClick={() => handleCancelInterview(s.id)}
+                            disabled={cancellingId === s.id}
+                            className="inline-flex items-center gap-1 rounded-lg border border-red-300 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                          >
+                            {cancellingId === s.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <X className="h-3 w-3" />
+                            )}
+                            Cancel
+                          </button>
+                        )}
+                        {s.status === "completed" && (
+                          <Link
+                            href={`/dashboard/interviews/${s.id}`}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                          >
+                            <Eye className="h-3 w-3" />
+                            View
+                          </Link>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

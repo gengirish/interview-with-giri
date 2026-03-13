@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from interviewbot.dependencies import get_db, get_org_id, pwd_context, require_role
@@ -28,11 +28,26 @@ async def _get_user_or_404(db: AsyncSession, user_id: UUID, org_id: UUID) -> Use
 async def list_users(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
+    q: str | None = Query(None),
+    role: str | None = Query(None),
+    is_active: bool | None = Query(None),
     user: dict = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> PaginatedResponse:
     base_query = select(User).where(User.org_id == org_id)
+
+    if q:
+        base_query = base_query.where(
+            or_(
+                User.email.ilike(f"%{q}%"),
+                User.full_name.ilike(f"%{q}%"),
+            )
+        )
+    if role:
+        base_query = base_query.where(User.role == role)
+    if is_active is not None:
+        base_query = base_query.where(User.is_active == is_active)
 
     count_result = await db.execute(select(func.count()).select_from(base_query.subquery()))
     total = count_result.scalar() or 0

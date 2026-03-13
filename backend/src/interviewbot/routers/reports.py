@@ -4,17 +4,81 @@ import csv
 import io
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from interviewbot.dependencies import get_db, get_org_id, require_role
-from interviewbot.models.schemas import CandidateReportResponse, DimensionalScore
-from interviewbot.models.tables import CandidateReport, InterviewSession
+from interviewbot.models.schemas import (
+    CandidateReportResponse,
+    DimensionalScore,
+    PaginatedResponse,
+)
+from interviewbot.models.tables import CandidateReport, InterviewSession, JobPosting
 from interviewbot.services.scoring_engine import score_interview
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
+
+
+@router.get("", response_model=PaginatedResponse)
+async def list_reports(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
+    db: AsyncSession = Depends(get_db),
+    org_id: UUID = Depends(get_org_id),
+):
+    base_query = (
+        select(
+            CandidateReport.id,
+            CandidateReport.session_id,
+            InterviewSession.candidate_name,
+            InterviewSession.overall_score,
+            CandidateReport.recommendation,
+            CandidateReport.created_at,
+            JobPosting.title.label("job_title"),
+        )
+        .select_from(CandidateReport)
+        .join(InterviewSession, CandidateReport.session_id == InterviewSession.id)
+        .join(JobPosting, InterviewSession.job_posting_id == JobPosting.id)
+        .where(InterviewSession.org_id == org_id)
+    )
+
+    count_stmt = select(func.count()).select_from(
+        select(CandidateReport.id)
+        .join(InterviewSession, CandidateReport.session_id == InterviewSession.id)
+        .where(InterviewSession.org_id == org_id)
+        .subquery()
+    )
+    total = (await db.execute(count_stmt)).scalar() or 0
+
+    result = await db.execute(
+        base_query.order_by(CandidateReport.created_at.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+    )
+    rows = result.all()
+
+    items = [
+        {
+            "id": str(row.id),
+            "session_id": str(row.session_id),
+            "candidate_name": row.candidate_name,
+            "overall_score": float(row.overall_score) if row.overall_score else None,
+            "recommendation": row.recommendation,
+            "created_at": row.created_at,
+            "job_title": row.job_title,
+        }
+        for row in rows
+    ]
+
+    return PaginatedResponse(
+        items=items,
+        total=total,
+        page=page,
+        per_page=per_page,
+    )
 
 
 async def _fetch_session_and_report(

@@ -283,10 +283,14 @@ export const api = {
     }),
 
   // Job Postings
-  getJobPostings: (page = 1) =>
-    request<PaginatedResponse<JobPosting>>(
-      `/api/v1/job-postings?page=${page}`,
-    ),
+  getJobPostings: (page = 1, filters?: { q?: string; is_active?: boolean; role_type?: string; interview_format?: string }) => {
+    const params = new URLSearchParams({ page: String(page) });
+    if (filters?.q) params.set("q", filters.q);
+    if (filters?.is_active !== undefined) params.set("is_active", String(filters.is_active));
+    if (filters?.role_type) params.set("role_type", filters.role_type);
+    if (filters?.interview_format) params.set("interview_format", filters.interview_format);
+    return request<PaginatedResponse<JobPosting>>(`/api/v1/job-postings?${params}`);
+  },
   getJobPosting: (id: string) =>
     request<JobPosting>(`/api/v1/job-postings/${id}`),
   createJobPosting: (data: Record<string, unknown>) =>
@@ -356,16 +360,19 @@ export const api = {
     }>(`/api/v1/job-postings/${id}/extract-skills`, { method: "POST" }),
 
   // Interviews
-  getInterviews: (page = 1, jobId?: string, status?: string) => {
+  getInterviews: (page = 1, jobId?: string, statusFilter?: string, candidateName?: string, dateFrom?: string, dateTo?: string) => {
     const params = new URLSearchParams({ page: String(page) });
     if (jobId) params.set("job_id", jobId);
-    if (status) params.set("status", status);
-    return request<PaginatedResponse<InterviewSession>>(
-      `/api/v1/interviews?${params}`,
-    );
+    if (statusFilter) params.set("status", statusFilter);
+    if (candidateName) params.set("candidate_name", candidateName);
+    if (dateFrom) params.set("date_from", dateFrom);
+    if (dateTo) params.set("date_to", dateTo);
+    return request<PaginatedResponse<InterviewSession>>(`/api/v1/interviews?${params}`);
   },
   getInterview: (id: string) =>
     request<InterviewSession>(`/api/v1/interviews/${id}`),
+  cancelInterview: (id: string) =>
+    request<{ status: string; session_id: string }>(`/api/v1/interviews/${id}/cancel`, { method: "PATCH" }),
   getInterviewMessages: (id: string) =>
     request<InterviewMessage[]>(`/api/v1/interviews/${id}/messages`),
 

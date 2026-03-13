@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 from uuid import UUID
 
@@ -24,11 +24,24 @@ router = APIRouter(prefix="/interviews", tags=["Interviews"])
 # --- Authenticated endpoints (dashboard) ---
 
 
+def _parse_date(s: str) -> datetime | None:
+    if not s:
+        return None
+    try:
+        d = datetime.strptime(s.strip(), "%Y-%m-%d")
+        return d.replace(tzinfo=UTC)
+    except ValueError:
+        return None
+
+
 @router.get("", response_model=PaginatedResponse)
 async def list_interviews(
     job_id: UUID | None = None,
     status_filter: Literal["pending", "in_progress", "completed", "expired", "disconnected"]
     | None = Query(None, alias="status"),
+    candidate_name: str | None = Query(None),
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
@@ -41,6 +54,16 @@ async def list_interviews(
         query = query.where(InterviewSession.job_posting_id == job_id)
     if status_filter:
         query = query.where(InterviewSession.status == status_filter)
+    if candidate_name:
+        query = query.where(InterviewSession.candidate_name.ilike(f"%{candidate_name}%"))
+    if date_from:
+        parsed = _parse_date(date_from)
+        if parsed:
+            query = query.where(InterviewSession.created_at >= parsed)
+    if date_to:
+        parsed = _parse_date(date_to)
+        if parsed:
+            query = query.where(InterviewSession.created_at <= parsed + timedelta(days=1))
 
     count_result = await db.execute(select(func.count()).select_from(query.subquery()))
     total = count_result.scalar() or 0
@@ -77,6 +100,32 @@ async def get_interview(
     if not session:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Interview not found")
     return _session_to_response(session)
+
+
+@router.patch("/{session_id}/cancel")
+async def cancel_interview(
+    session_id: UUID,
+    user: dict = Depends(require_role("admin", "hiring_manager")),
+    db: AsyncSession = Depends(get_db),
+    org_id: UUID = Depends(get_org_id),
+):
+    result = await db.execute(
+        select(InterviewSession).where(
+            InterviewSession.id == session_id,
+            InterviewSession.org_id == org_id,
+        )
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interview not found")
+    if session.status == "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot cancel a completed interview",
+        )
+    session.status = "cancelled"
+    await db.commit()
+    return {"status": "cancelled", "session_id": str(session_id)}
 
 
 @router.get("/{session_id}/messages", response_model=list[InterviewMessageResponse])

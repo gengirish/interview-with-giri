@@ -14,9 +14,11 @@ import {
   Loader2,
   Briefcase,
   Upload,
+  Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import Link from "next/link";
 
 type FormData = {
   title: string;
@@ -59,17 +61,31 @@ export default function JobsPage() {
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [deleteJobId, setDeleteJobId] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [roleTypeFilter, setRoleTypeFilter] = useState<string>("");
+  const [interviewFormatFilter, setInterviewFormatFilter] = useState<string>("");
+  const [isActiveFilter, setIsActiveFilter] = useState<string>("");
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const perPage = 20;
 
   const loadJobs = useCallback(async () => {
     try {
-      const res = await api.getJobPostings();
+      const filters: { q?: string; is_active?: boolean; role_type?: string; interview_format?: string } = {};
+      if (searchQuery.trim()) filters.q = searchQuery.trim();
+      if (roleTypeFilter) filters.role_type = roleTypeFilter;
+      if (interviewFormatFilter) filters.interview_format = interviewFormatFilter;
+      if (isActiveFilter === "active") filters.is_active = true;
+      if (isActiveFilter === "inactive") filters.is_active = false;
+      const res = await api.getJobPostings(page, Object.keys(filters).length ? filters : undefined);
       setJobs(res.items);
+      setTotalPages(Math.max(1, Math.ceil(res.total / (res.per_page || perPage))));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load jobs");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, searchQuery, roleTypeFilter, interviewFormatFilter, isActiveFilter]);
 
   useEffect(() => {
     loadJobs();
@@ -191,6 +207,56 @@ export default function JobsPage() {
           </div>
         )}
       </div>
+
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
+          <input
+            placeholder="Search jobs..."
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setPage(1);
+            }}
+            className="flex-1 min-w-[180px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+          />
+          <select
+            value={roleTypeFilter}
+            onChange={(e) => {
+              setRoleTypeFilter(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+          >
+            <option value="">All Role Types</option>
+            <option value="technical">Technical</option>
+            <option value="non_technical">Non-Technical</option>
+            <option value="mixed">Mixed</option>
+          </select>
+          <select
+            value={interviewFormatFilter}
+            onChange={(e) => {
+              setInterviewFormatFilter(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+          >
+            <option value="">All Formats</option>
+            <option value="text">Text</option>
+            <option value="voice">Voice</option>
+            <option value="video">Video</option>
+          </select>
+          <select
+            value={isActiveFilter}
+            onChange={(e) => {
+              setIsActiveFilter(e.target.value);
+              setPage(1);
+            }}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+          >
+            <option value="">All</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
 
       {showForm && (
         <form
@@ -431,6 +497,16 @@ export default function JobsPage() {
                 </div>
                 <div className="flex items-center gap-2 ml-4">
                   {canEdit && (
+                    <Link
+                      href={`/dashboard/jobs/${job.id}`}
+                      className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                      title="Edit job"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      Edit
+                    </Link>
+                  )}
+                  {canEdit && (
                     <button
                       onClick={() => handleExtractSkills(job.id)}
                       disabled={extracting === job.id}
@@ -476,6 +552,28 @@ export default function JobsPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <button
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50 hover:bg-slate-50 transition-colors"
+          >
+            Previous
+          </button>
+          <span className="text-sm text-slate-500">
+            Page {page} of {totalPages}
+          </span>
+          <button
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-50 hover:bg-slate-50 transition-colors"
+          >
+            Next
+          </button>
         </div>
       )}
 

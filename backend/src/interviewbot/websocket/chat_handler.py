@@ -10,8 +10,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
-from interviewbot.models.tables import InterviewMessage, InterviewSession, JobPosting
+from interviewbot.config import get_settings
+from interviewbot.models.tables import InterviewMessage, InterviewSession, JobPosting, User
+from interviewbot.routers.webhooks import dispatch_webhook
 from interviewbot.services.ai_engine import AIEngine, InterviewConversation
+from interviewbot.services.notifications import send_interview_completed
 
 logger = structlog.get_logger()
 
@@ -142,6 +145,41 @@ async def _handle_end_interview(
         session_id=str(session.id),
         questions=questions,
     )
+
+    with contextlib.suppress(Exception):
+        job_result = await db.execute(
+            select(JobPosting).where(JobPosting.id == session.job_posting_id)
+        )
+        job = job_result.scalar_one_or_none()
+        job_title = job.title if job else "Unknown"
+        user_result = await db.execute(
+            select(User)
+            .where(User.org_id == session.org_id)
+            .where(User.role.in_(["admin", "hiring_manager"]))
+        )
+        hiring_manager = user_result.scalars().first()
+        hiring_manager_email = hiring_manager.email if hiring_manager else None
+        if hiring_manager_email:
+            settings = get_settings()
+            report_url = f"{settings.app_url}/dashboard/interviews/{session.id}"
+            await send_interview_completed(
+                hiring_manager_email,
+                session.candidate_name or "",
+                job_title,
+                float(session.overall_score) if session.overall_score else None,
+                report_url,
+            )
+    with contextlib.suppress(Exception):
+        await dispatch_webhook(
+            str(session.org_id),
+            "interview.completed",
+            {
+                "session_id": str(session.id),
+                "candidate_name": session.candidate_name or "",
+                "status": "completed",
+            },
+            db,
+        )
 
 
 async def _process_candidate_message(

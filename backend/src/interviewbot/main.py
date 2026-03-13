@@ -60,6 +60,16 @@ def create_app() -> FastAPI:
         structlog.contextvars.clear_contextvars()
         return response
 
+    @app.middleware("http")
+    async def security_headers_middleware(request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if not settings.debug:
+            response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+        return response
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins_list,
@@ -71,6 +81,7 @@ def create_app() -> FastAPI:
 
     from interviewbot.routers.auth import limiter
 
+    limiter.default_limits = ["60/minute"]
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
