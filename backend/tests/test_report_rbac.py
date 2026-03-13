@@ -92,7 +92,7 @@ async def _setup_session_with_report(client, db):
     report = CandidateReport(
         session_id=uuid.UUID(session_id),
         ai_summary="Good candidate.",
-        recommendation="Hire",
+        recommendation="hire",
         strengths=["Python"],
         concerns=[],
         confidence_score=0.9,
@@ -101,6 +101,7 @@ async def _setup_session_with_report(client, db):
     )
     db.add(report)
     await db.commit()
+    await db.refresh(report)
 
     return viewer_h, session_id
 
@@ -148,10 +149,10 @@ async def test_admin_can_generate_report(client, db):
     )
     await db.commit()
 
-    report = CandidateReport(
+    mock_report = CandidateReport(
         session_id=uuid.UUID(session_id),
         ai_summary="Generated report.",
-        recommendation="Hire",
+        recommendation="hire",
         strengths=[],
         concerns=[],
         confidence_score=0.85,
@@ -159,10 +160,16 @@ async def test_admin_can_generate_report(client, db):
         behavioral_scores={},
     )
 
+    async def _fake_score(sid, session_db):
+        session_db.add(mock_report)
+        await session_db.commit()
+        await session_db.refresh(mock_report)
+        return mock_report
+
     with patch(
         "interviewbot.routers.reports.score_interview",
         new_callable=AsyncMock,
-        return_value=report,
+        side_effect=_fake_score,
     ):
         resp = await client.post(
             f"/api/v1/reports/{session_id}/generate",
@@ -172,7 +179,7 @@ async def test_admin_can_generate_report(client, db):
     assert resp.status_code == 200
     data = resp.json()
     assert data["ai_summary"] == "Generated report."
-    assert data["recommendation"] == "Hire"
+    assert data["recommendation"] == "hire"
 
 
 @pytest.mark.asyncio
