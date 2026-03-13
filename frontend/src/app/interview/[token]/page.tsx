@@ -58,6 +58,8 @@ export default function CandidateInterviewPage() {
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const interviewActiveRef = useRef(false);
 
+  const primaryColor = branding?.primary_color || "#4F46E5";
+
   useEffect(() => {
     async function load() {
       try {
