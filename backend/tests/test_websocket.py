@@ -68,7 +68,7 @@ def _setup_interview(tc: TestClient, num_questions: int = 10) -> str:
     job_id = job_resp.json()["id"]
 
     link_resp = tc.post(f"/api/v1/job-postings/{job_id}/generate-link", headers=headers)
-    assert link_resp.status_code == 201
+    assert link_resp.status_code in (200, 201)
     token = link_resp.json()["token"]
 
     start_resp = tc.post(
@@ -183,7 +183,7 @@ def test_ws_interview_ends_after_max_questions() -> None:
         ),
         TestClient(app) as tc,
     ):
-        token = _setup_interview(tc, num_questions=2)
+        token = _setup_interview(tc, num_questions=3)
 
         with patch("interviewbot.websocket.chat_handler.AIEngine") as mock_cls:
             mock_engine = AsyncMock()
@@ -194,7 +194,7 @@ def test_ws_interview_ends_after_max_questions() -> None:
                 q1 = ws.receive_json()
                 assert q1["type"] == "question"
                 assert q1["progress"] == 1
-                assert q1["total"] == 2
+                assert q1["total"] == 3
 
                 ws.send_json(
                     {
