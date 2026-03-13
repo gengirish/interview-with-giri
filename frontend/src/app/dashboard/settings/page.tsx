@@ -9,6 +9,8 @@ import {
   Bell,
   Link2,
   Plug,
+  Mail,
+  CheckCircle2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -34,6 +36,13 @@ export default function SettingsPage() {
     subdomain: string;
   }>({ platform: "", apiKey: "", subdomain: "" });
   const [atsDisconnectPlatform, setAtsDisconnectPlatform] = useState<string | null>(null);
+  const [emailStatus, setEmailStatus] = useState<{
+    configured: boolean;
+    inbox_id: string | null;
+    email: string | null;
+  } | null>(null);
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailSetupLoading, setEmailSetupLoading] = useState(false);
   const [notificationPrefs, setNotificationPrefs] = useState<{
     interview_completed: boolean;
     report_generated: boolean;
@@ -102,6 +111,40 @@ export default function SettingsPage() {
       .catch(() => setWebhooks([]))
       .finally(() => setWebhooksLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "email") {
+      setEmailLoading(true);
+      api
+        .getEmailStatus()
+        .then(setEmailStatus)
+        .catch(() => setEmailStatus(null))
+        .finally(() => setEmailLoading(false));
+    }
+  }, [activeTab]);
+
+  async function handleSetupEmail() {
+    setEmailSetupLoading(true);
+    try {
+      const res = await api.setupOrgEmail();
+      setEmailStatus({
+        configured: true,
+        inbox_id: res.inbox_id,
+        email: res.email,
+      });
+      toast.success(
+        res.already_configured
+          ? "Email inbox already configured"
+          : "Email inbox created successfully",
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to set up email inbox",
+      );
+    } finally {
+      setEmailSetupLoading(false);
+    }
+  }
 
   async function handleUpgrade(planId: string) {
     try {
@@ -172,6 +215,7 @@ export default function SettingsPage() {
 
   const tabs = [
     { id: "billing", label: "Billing", icon: CreditCard },
+    { id: "email", label: "Email", icon: Mail },
     { id: "webhooks", label: "Webhooks", icon: Link2 },
     { id: "notifications", label: "Notifications", icon: Bell },
     { id: "integrations", label: "Integrations", icon: Plug },
@@ -369,6 +413,72 @@ export default function SettingsPage() {
               ))
             )}
           </div>
+        </div>
+      )}
+
+      {activeTab === "email" && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-900">
+            Email Delivery (AgentMail)
+          </h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Set up a dedicated email inbox for sending interview invitations and
+            completion notifications via AgentMail.
+          </p>
+
+          {emailLoading ? (
+            <div className="mt-6 flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+            </div>
+          ) : emailStatus?.configured ? (
+            <div className="mt-6 space-y-4">
+              <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 p-4">
+                <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-green-900">
+                    Email inbox active
+                  </p>
+                  <p className="text-sm text-green-700 mt-0.5">
+                    Sending from{" "}
+                    <strong className="font-semibold">
+                      {emailStatus.email}
+                    </strong>
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-lg bg-slate-50 p-4 text-xs text-slate-500 space-y-1">
+                <p className="font-medium text-slate-700">
+                  Emails are sent automatically for:
+                </p>
+                <ul className="list-disc list-inside space-y-0.5">
+                  <li>Interview invitation links</li>
+                  <li>Interview completion notifications to hiring managers</li>
+                </ul>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-6 space-y-4">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm text-slate-600">
+                  No email inbox configured yet. Click below to create a
+                  dedicated inbox for your organisation. Interview notifications
+                  will be sent from this address.
+                </p>
+              </div>
+              <button
+                onClick={handleSetupEmail}
+                disabled={emailSetupLoading}
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors disabled:opacity-50"
+              >
+                {emailSetupLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Mail className="h-4 w-4" />
+                )}
+                Set Up Email Inbox
+              </button>
+            </div>
+          )}
         </div>
       )}
 

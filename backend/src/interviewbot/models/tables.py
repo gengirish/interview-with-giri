@@ -22,6 +22,8 @@ class Organization(Base):
     domain = Column(String(255))
     settings = Column(JSONB, default=dict)
     is_active = Column(Boolean, default=True)
+    agentmail_inbox_id = Column(String(255), nullable=True)
+    agentmail_email = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

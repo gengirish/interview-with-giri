@@ -43,6 +43,7 @@ async def send_interview_invitation(
     job_title: str,
     interview_url: str,
     org_name: str,
+    org_inbox_id: str | None = None,
 ) -> bool:
     body = f"""
     <p style="color: #475569;">Hi {candidate_name},</p>
@@ -64,6 +65,7 @@ async def send_interview_invitation(
         to_email=candidate_email,
         subject=f"Interview Invitation: {job_title} at {org_name}",
         html=_build_html("Interview Invitation", body),
+        org_inbox_id=org_inbox_id,
     )
 
 
@@ -73,6 +75,7 @@ async def send_interview_completed(
     job_title: str,
     score: float | None,
     report_url: str,
+    org_inbox_id: str | None = None,
 ) -> bool:
     score_text = f"{score:.1f}/10" if score else "Pending"
     body = f"""
@@ -103,12 +106,34 @@ async def send_interview_completed(
         to_email=hiring_manager_email,
         subject=f"Interview Completed: {candidate_name} for {job_title}",
         html=_build_html("Interview Completed", body),
+        org_inbox_id=org_inbox_id,
     )
 
 
-async def _send_email(to_email: str, subject: str, html: str) -> bool:
+async def _send_email(
+    to_email: str,
+    subject: str,
+    html: str,
+    org_inbox_id: str | None = None,
+) -> bool:
     settings = get_settings()
 
+    # --- AgentMail (preferred) ---
+    if settings.agentmail_api_key and org_inbox_id:
+        from interviewbot.services.agentmail_client import send_email as am_send
+
+        ok = await am_send(
+            inbox_id=org_inbox_id,
+            to=to_email,
+            subject=subject,
+            text=subject,
+            html=html,
+        )
+        if ok:
+            return True
+        logger.warning("agentmail_fallback_to_smtp", to=to_email)
+
+    # --- SMTP fallback ---
     smtp_host = getattr(settings, "smtp_host", "")
     smtp_port = getattr(settings, "smtp_port", 587)
     smtp_user = getattr(settings, "smtp_user", "")

@@ -11,7 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
 from interviewbot.config import get_settings
-from interviewbot.models.tables import InterviewMessage, InterviewSession, JobPosting, User
+from interviewbot.models.tables import (
+    InterviewMessage,
+    InterviewSession,
+    JobPosting,
+    Organization,
+    User,
+)
 from interviewbot.routers.webhooks import dispatch_webhook
 from interviewbot.services.ai_engine import AIEngine, InterviewConversation
 from interviewbot.services.notifications import send_interview_completed
@@ -152,6 +158,11 @@ async def _handle_end_interview(
         )
         job = job_result.scalar_one_or_none()
         job_title = job.title if job else "Unknown"
+        org_result = await db.execute(
+            select(Organization).where(Organization.id == session.org_id)
+        )
+        org = org_result.scalar_one_or_none()
+        org_inbox_id = org.agentmail_inbox_id if org else None
         user_result = await db.execute(
             select(User)
             .where(User.org_id == session.org_id)
@@ -168,6 +179,7 @@ async def _handle_end_interview(
                 job_title,
                 float(session.overall_score) if session.overall_score else None,
                 report_url,
+                org_inbox_id=org_inbox_id,
             )
     with contextlib.suppress(Exception):
         await dispatch_webhook(

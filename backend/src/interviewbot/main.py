@@ -20,6 +20,7 @@ from interviewbot.routers import (
     health,
     interviews,
     job_postings,
+    organizations,
     proctoring,
     reports,
     users,
@@ -115,6 +116,7 @@ def create_app() -> FastAPI:
     app.include_router(users.router, prefix="/api/v1")
     app.include_router(webhooks.router, prefix="/api/v1")
     app.include_router(ats.router, prefix="/api/v1")
+    app.include_router(organizations.router, prefix="/api/v1")
 
     @app.websocket("/ws/interview/{token}")
     async def websocket_interview(websocket: WebSocket, token: str) -> None:

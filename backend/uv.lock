@@ -3,6 +3,22 @@ revision = 3
 requires-python = ">=3.12"
 
 [[package]]
+name = "agentmail"
+version = "0.4.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "pydantic-core" },
+    { name = "typing-extensions" },
+    { name = "websockets" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cc/b4/46b2658a713300a029537b603d69ebf8a49468debf22eb531b250ab78bdc/agentmail-0.4.5.tar.gz", hash = "sha256:71d2bfe8909f8a9c5695531ec4312f6459eb8b3a947ff32e0a4bfc20ee16202e", size = 101200, upload-time = "2026-03-10T11:35:55.057Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/64/fe/1084f609ef8cf9eaa7009a4c0f23569f442fd43173efde4fe408db6847d1/agentmail-0.4.5-py3-none-any.whl", hash = "sha256:1993e569f20bf14d7777907438bde82d3716dc65abbdd4e9f0e8efc0779f230b", size = 223074, upload-time = "2026-03-10T11:35:53.674Z" },
+]
+
+[[package]]
 name = "aiohappyeyeballs"
 version = "2.6.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1011,6 +1027,7 @@ name = "interviewbot"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "agentmail" },
     { name = "alembic" },
     { name = "anthropic" },
     { name = "asyncpg" },
@@ -1071,6 +1088,7 @@ type-check = [
 
 [package.metadata]
 requires-dist = [
+    { name = "agentmail", specifier = ">=0.1" },
     { name = "alembic", specifier = ">=1.13" },
     { name = "anthropic", specifier = ">=0.37" },
     { name = "asyncpg", specifier = ">=0.30" },

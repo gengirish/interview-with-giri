@@ -475,6 +475,17 @@ export const api = {
       },
     ),
 
+  // Organization / Email
+  setupOrgEmail: () =>
+    request<{ inbox_id: string; email: string; already_configured: boolean }>(
+      "/api/v1/organizations/email/setup",
+      { method: "POST" },
+    ),
+  getEmailStatus: () =>
+    request<{ configured: boolean; inbox_id: string | null; email: string | null }>(
+      "/api/v1/organizations/email/status",
+    ),
+
   // User Management
   getUsers: () => request<OrgUser[]>("/api/v1/users"),
   getCurrentUser: () => request<OrgUser>("/api/v1/users/me"),

@@ -56,12 +56,16 @@ class Settings(BaseSettings):
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
 
-    # Email
+    # Email (SMTP fallback)
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
     from_email: str = "noreply@interviewbot.ai"
+
+    # AgentMail (primary email provider)
+    agentmail_api_key: str = ""
+    agentmail_default_domain: str = "agentmail.to"
 
     # App
     app_url: str = "http://localhost:3000"
