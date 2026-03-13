@@ -7,11 +7,14 @@ Creates its own DB engine to avoid event loop conflicts with pytest-asyncio.
 import os
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from starlette.testclient import TestClient
 
 from interviewbot.models.database import _make_connect_args, _strip_sslmode
 from tests.conftest import JOB_PAYLOAD, SIGNUP_PAYLOAD
+
+pytestmark = pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
 
 
 def _ws_engine_and_factory():
