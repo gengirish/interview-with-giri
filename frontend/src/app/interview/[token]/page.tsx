@@ -346,7 +346,7 @@ export default function CandidateInterviewPage() {
       );
     }
 
-    async function handleFeedbackSubmit(e: React.FormEvent) {
+    const handleFeedbackSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       if (overallRating < 1 || !token) return;
       setFeedbackLoading(true);
@@ -365,9 +365,9 @@ export default function CandidateInterviewPage() {
       } finally {
         setFeedbackLoading(false);
       }
-    }
+    };
 
-    function StarRating({
+    const StarRating = ({
       value,
       onChange,
       size = "sm",
@@ -375,7 +375,7 @@ export default function CandidateInterviewPage() {
       value: number;
       onChange: (v: number) => void;
       size?: "sm" | "md";
-    }) {
+    }) => {
       const sizeClass = size === "md" ? "h-8 w-8" : "h-5 w-5";
       return (
         <div className="flex gap-1">
@@ -397,7 +397,7 @@ export default function CandidateInterviewPage() {
           ))}
         </div>
       );
-    }
+    };
 
     if (feedbackSubmitted) {
       return (
