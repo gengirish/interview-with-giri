@@ -230,7 +230,7 @@ export default function ComparePage() {
       const result = await api.generateDebrief(uniqueIds);
       setDebriefContent(result.debrief);
       setShowDebrief(true);
-    } catch (e) {
+    } catch {
       toast.error("Failed to generate debrief");
     } finally {
       setDebriefLoading(false);

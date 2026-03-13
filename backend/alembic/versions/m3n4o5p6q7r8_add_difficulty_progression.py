@@ -7,7 +7,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
 revision: str = "m3n4o5p6q7r8"
-down_revision: str | None = "k1l2m3n4o5p6"
+down_revision: str | None = "l2m3n4o5p6q7"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
