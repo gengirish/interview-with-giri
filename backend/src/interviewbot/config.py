@@ -1,4 +1,5 @@
 from functools import lru_cache
+import warnings
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
@@ -71,11 +72,28 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
 
     @model_validator(mode="after")
-    def validate_jwt_secret_in_prod(self) -> "Settings":
-        if self.app_env in {"prod", "production"} and (
-            not self.jwt_secret or self.jwt_secret == "change-me-in-production"
-        ):
+    def validate_production_settings(self) -> "Settings":
+        if self.app_env not in {"prod", "production"}:
+            return self
+        # Hard failures in production
+        default_db = "postgresql+asyncpg://postgres:postgres@localhost:5432/interviewbot"
+        if not self.database_url or self.database_url == default_db:
+            raise ValueError("DATABASE_URL must not be the default localhost URL in production")
+        if not self.jwt_secret or self.jwt_secret == "change-me-in-production":
             raise ValueError("JWT_SECRET must be set to a secure value in production")
+        # Warnings (optional features)
+        if not self.stripe_secret_key:
+            warnings.warn(
+                "STRIPE_SECRET_KEY is empty in production; billing features may be disabled",
+                UserWarning,
+                stacklevel=2,
+            )
+        if not self.openai_api_key:
+            warnings.warn(
+                "OPENAI_API_KEY is empty in production; some AI features may be disabled",
+                UserWarning,
+                stacklevel=2,
+            )
         return self
 
     @property

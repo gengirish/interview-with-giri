@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+*.md
+playwright-report
+test-results
+tests
+.env*
+.eslintcache

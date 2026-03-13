@@ -2,19 +2,17 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from jose import jwt
-from passlib.context import CryptContext
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from interviewbot.config import get_settings
-from interviewbot.dependencies import get_db
+from interviewbot.dependencies import get_db, pwd_context
 from interviewbot.models.schemas import LoginRequest, SignupRequest, TokenResponse
 from interviewbot.models.tables import Organization, Subscription, User
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 limiter = Limiter(key_func=get_remote_address, default_limits=[], enabled=True)
 
 

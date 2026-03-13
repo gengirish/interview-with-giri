@@ -1,6 +1,30 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 const REQUEST_TIMEOUT_MS = 15000;
 
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 2
+): Promise<Response> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      if (response.status >= 500 && attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 1000));
+        continue;
+      }
+      return response;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 1000));
+      }
+    }
+  }
+  throw lastError ?? new Error("Request failed after retries");
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -19,9 +43,12 @@ async function fetchWithTimeout(
   const { skipAuthRedirect, token, ...fetchOptions } = options;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const method = (fetchOptions.method ?? "GET").toUpperCase();
+  const isGet = method === "GET";
+  const fetcher = isGet ? fetchWithRetry : fetch;
 
   try {
-    const res = await fetch(url, {
+    const res = await fetcher(url, {
       ...fetchOptions,
       headers: {
         "Content-Type": "application/json",

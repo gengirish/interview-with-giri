@@ -1,4 +1,5 @@
 import traceback
+import uuid as uuid_mod
 
 from fastapi import FastAPI, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,6 +50,15 @@ def create_app() -> FastAPI:
         docs_url="/api/docs" if settings.debug else None,
         redoc_url="/api/redoc" if settings.debug else None,
     )
+
+    @app.middleware("http")
+    async def request_id_middleware(request, call_next):
+        request_id = request.headers.get("x-request-id", str(uuid_mod.uuid4()))
+        structlog.contextvars.bind_contextvars(request_id=request_id)
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        structlog.contextvars.clear_contextvars()
+        return response
 
     app.add_middleware(
         CORSMiddleware,

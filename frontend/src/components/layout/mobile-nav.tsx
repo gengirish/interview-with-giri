@@ -1,47 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  BarChart3,
-  Briefcase,
-  LogOut,
-  Menu,
-  MessageSquare,
-  Settings,
-  LayoutDashboard,
-  Users,
-  X,
-} from "lucide-react";
+import { LogOut, Menu, MessageSquare, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAuth, type UserRole } from "@/hooks/use-auth";
-
-interface NavItem {
-  label: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  roles?: UserRole[];
-}
-
-const navItems: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Jobs", href: "/dashboard/jobs", icon: Briefcase },
-  { label: "Interviews", href: "/dashboard/interviews", icon: MessageSquare },
-  { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
-  {
-    label: "Team",
-    href: "/dashboard/team",
-    icon: Users,
-    roles: ["admin"],
-  },
-  {
-    label: "Settings",
-    href: "/dashboard/settings",
-    icon: Settings,
-    roles: ["admin"],
-  },
-];
+import { useAuth } from "@/hooks/use-auth";
+import { navItems } from "./nav-items";
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);
@@ -51,6 +16,16 @@ export function MobileNav() {
   const visibleItems = navItems.filter(
     (item) => !item.roles || (role && hasRole(...item.roles)),
   );
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    if (open) {
+      document.addEventListener("keydown", handleKeyDown);
+      return () => document.removeEventListener("keydown", handleKeyDown);
+    }
+  }, [open]);
 
   return (
     <>
@@ -95,7 +70,7 @@ export function MobileNav() {
           <button
             onClick={() => setOpen(false)}
             className="rounded-lg p-2 hover:bg-slate-100"
-            aria-label="Close menu"
+            aria-label="Close navigation"
           >
             <X className="h-6 w-6 text-slate-600" />
           </button>

@@ -381,6 +381,7 @@ export default function VideoInterviewPage() {
                   "rounded-full p-3 transition-colors",
                   isMuted ? "bg-red-600" : "bg-slate-700 hover:bg-slate-600",
                 )}
+                aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
               >
                 {isMuted ? (
                   <MicOff className="h-5 w-5 text-white" />
@@ -394,6 +395,7 @@ export default function VideoInterviewPage() {
                   "rounded-full p-3 transition-colors",
                   isVideoOff ? "bg-red-600" : "bg-slate-700 hover:bg-slate-600",
                 )}
+                aria-label={isVideoOff ? "Turn camera on" : "Turn camera off"}
               >
                 {isVideoOff ? (
                   <VideoOff className="h-5 w-5 text-white" />
@@ -411,6 +413,7 @@ export default function VideoInterviewPage() {
                     : "bg-indigo-600 hover:bg-indigo-700",
                   thinking && "opacity-50",
                 )}
+                aria-label={isRecording ? "Stop recording" : "Start recording"}
               >
                 {isRecording ? (
                   <MicOff className="h-5 w-5 text-white" />

@@ -17,6 +17,32 @@ from interviewbot.services.scoring_engine import score_interview
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
 
+async def _fetch_session_and_report(
+    session_id: UUID, db: AsyncSession, org_id: UUID
+) -> tuple[InterviewSession, CandidateReport]:
+    """Fetch interview session and its report, raising 404 if not found."""
+    session_result = await db.execute(
+        select(InterviewSession).where(
+            InterviewSession.id == session_id,
+            InterviewSession.org_id == org_id,
+        )
+    )
+    session = session_result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interview not found")
+
+    report_result = await db.execute(
+        select(CandidateReport).where(CandidateReport.session_id == session_id)
+    )
+    report = report_result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Report not generated yet"
+        )
+
+    return session, report
+
+
 @router.post("/{session_id}/generate", response_model=CandidateReportResponse)
 async def generate_report(
     session_id: UUID,
@@ -50,23 +76,7 @@ async def get_report(
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
 ) -> CandidateReportResponse:
-    session_result = await db.execute(
-        select(InterviewSession).where(
-            InterviewSession.id == session_id,
-            InterviewSession.org_id == org_id,
-        )
-    )
-    session = session_result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Interview not found")
-
-    report_result = await db.execute(
-        select(CandidateReport).where(CandidateReport.session_id == session_id)
-    )
-    report = report_result.scalar_one_or_none()
-    if not report:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Report not generated yet")
-
+    session, report = await _fetch_session_and_report(session_id, db, org_id)
     return _to_response(report, session.candidate_name, session.overall_score)
 
 
@@ -78,23 +88,7 @@ async def export_report_json(
     org_id: UUID = Depends(get_org_id),
 ) -> dict:
     """Export the full scorecard as structured JSON for ATS integration."""
-    session_result = await db.execute(
-        select(InterviewSession).where(
-            InterviewSession.id == session_id,
-            InterviewSession.org_id == org_id,
-        )
-    )
-    session = session_result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Interview not found")
-
-    report_result = await db.execute(
-        select(CandidateReport).where(CandidateReport.session_id == session_id)
-    )
-    report = report_result.scalar_one_or_none()
-    if not report:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Report not generated yet")
-
+    session, report = await _fetch_session_and_report(session_id, db, org_id)
     extended = report.extended_data or {}
     return {
         "export_version": "1.0",
@@ -135,23 +129,7 @@ async def export_report_csv(
     org_id: UUID = Depends(get_org_id),
 ) -> StreamingResponse:
     """Export scorecard as CSV for spreadsheet import."""
-    session_result = await db.execute(
-        select(InterviewSession).where(
-            InterviewSession.id == session_id,
-            InterviewSession.org_id == org_id,
-        )
-    )
-    session = session_result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Interview not found")
-
-    report_result = await db.execute(
-        select(CandidateReport).where(CandidateReport.session_id == session_id)
-    )
-    report = report_result.scalar_one_or_none()
-    if not report:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Report not generated yet")
-
+    session, report = await _fetch_session_and_report(session_id, db, org_id)
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["Category", "Dimension", "Score", "Evidence", "Notes"])

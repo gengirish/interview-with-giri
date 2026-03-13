@@ -14,7 +14,7 @@ router = APIRouter(prefix="/code", tags=["Code Execution"])
 class CodeSubmission(BaseModel):
     source_code: str = Field(..., max_length=50000)
     language: str = Field(..., min_length=1)
-    stdin: str = ""
+    stdin: str = Field("", max_length=10000)
     timeout: float = Field(10.0, ge=1.0, le=30.0)
     interview_token: str = Field(..., min_length=1)
 

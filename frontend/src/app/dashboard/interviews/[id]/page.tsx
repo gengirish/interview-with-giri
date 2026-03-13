@@ -35,20 +35,19 @@ import { cn, formatDuration, formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
-  RadarChart,
   PolarGrid,
   PolarAngleAxis,
   PolarRadiusAxis,
   Radar,
   Legend,
   ResponsiveContainer,
-  AreaChart,
   Area,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
 } from "recharts";
+import { LazyRadarChart, LazyAreaChart } from "@/components/lazy-charts";
 
 const TECHNICAL_DIMENSION_KEYS = [
   "code_quality",
@@ -593,7 +592,7 @@ export default function InterviewDetailPage() {
                 </h3>
                 <div className="h-80 w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <RadarChart data={radarData}>
+                    <LazyRadarChart data={radarData}>
                       <PolarGrid />
                       <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 11 }} />
                       <PolarRadiusAxis angle={30} domain={[0, 10]} />
@@ -616,7 +615,7 @@ export default function InterviewDetailPage() {
                         />
                       )}
                       <Legend />
-                    </RadarChart>
+                    </LazyRadarChart>
                   </ResponsiveContainer>
                 </div>
               </div>
@@ -848,7 +847,7 @@ export default function InterviewDetailPage() {
               <h4 className="text-sm font-medium text-slate-700 mb-4">Behavior Timeline</h4>
               <div className="h-[200px] w-full">
                 <ResponsiveContainer width="100%" height={200}>
-                  <AreaChart
+                  <LazyAreaChart
                     data={generateTimelineData(
                       integrity.details,
                       Math.max(session.duration_seconds ? Math.ceil(session.duration_seconds / 60) : 5, 5),
@@ -890,7 +889,7 @@ export default function InterviewDetailPage() {
                       fillOpacity={0.6}
                       name="Tab Switches"
                     />
-                  </AreaChart>
+                  </LazyAreaChart>
                 </ResponsiveContainer>
               </div>
             </div>

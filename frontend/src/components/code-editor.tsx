@@ -1,8 +1,20 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import Editor from "@monaco-editor/react";
+import dynamic from "next/dynamic";
 import type { editor } from "monaco-editor";
+
+const MonacoEditor = dynamic(
+  () => import("@monaco-editor/react").then((mod) => mod.default),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-full w-full flex items-center justify-center bg-gray-900 text-gray-400">
+        Loading editor...
+      </div>
+    ),
+  }
+);
 import { Play, Loader2, RotateCcw, AlertCircle, Send } from "lucide-react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -316,6 +328,7 @@ export function CodeEditor({
             onClick={runCode}
             disabled={running || readOnly}
             className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            aria-label="Run code"
           >
             {running ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -343,7 +356,7 @@ export function CodeEditor({
       </div>
 
       <div className="min-h-[400px] flex-1">
-        <Editor
+        <MonacoEditor
           height="400px"
           defaultLanguage={MONACO_LANG_MAP[language] ?? "plaintext"}
           language={MONACO_LANG_MAP[language] ?? "plaintext"}

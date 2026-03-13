@@ -62,6 +62,7 @@ dev = [
     { include-group = "test" },
     { include-group = "type_check" },
     { include-group = "lint" },
+    "pip-audit>=2.10.0",
 ]
 
 [build-system]

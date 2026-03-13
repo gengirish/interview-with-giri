@@ -2,38 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  BarChart3,
-  Briefcase,
-  LogOut,
-  MessageSquare,
-  Settings,
-  LayoutDashboard,
-  Users,
-} from "lucide-react";
+import { LogOut, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAuth, type UserRole } from "@/hooks/use-auth";
-
-interface NavItem {
-  label: string;
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  roles?: UserRole[];
-}
-
-const navItems: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Jobs", href: "/dashboard/jobs", icon: Briefcase },
-  { label: "Interviews", href: "/dashboard/interviews", icon: MessageSquare },
-  { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
-  {
-    label: "Team",
-    href: "/dashboard/team",
-    icon: Users,
-    roles: ["admin"],
-  },
-  { label: "Settings", href: "/dashboard/settings", icon: Settings, roles: ["admin"] },
-];
+import { useAuth } from "@/hooks/use-auth";
+import { navItems } from "./nav-items";
 
 interface SidebarProps {
   className?: string;

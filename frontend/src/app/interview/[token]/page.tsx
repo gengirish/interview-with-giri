@@ -472,6 +472,7 @@ export default function CandidateInterviewPage() {
             type="submit"
             disabled={thinking || !input.trim()}
             className="rounded-xl bg-indigo-600 p-3 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            aria-label="Send message"
           >
             <Send className="h-5 w-5" />
           </button>

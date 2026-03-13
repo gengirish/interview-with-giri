@@ -1,11 +1,10 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from passlib.context import CryptContext
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from interviewbot.dependencies import get_db, get_org_id, require_role
+from interviewbot.dependencies import get_db, get_org_id, pwd_context, require_role
 from interviewbot.models.schemas import (
     InviteUserRequest,
     PaginatedResponse,
@@ -15,7 +14,6 @@ from interviewbot.models.schemas import (
 from interviewbot.models.tables import User
 
 router = APIRouter(prefix="/users", tags=["User Management"])
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 async def _get_user_or_404(db: AsyncSession, user_id: UUID, org_id: UUID) -> User:

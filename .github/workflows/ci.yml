@@ -99,7 +99,7 @@ jobs:
       - run: uv sync --locked
         working-directory: backend
       - name: Run full test suite (including E2E)
-        run: uv run pytest tests/ -v --timeout=90 --tb=short
+        run: uv run pytest tests/ -v --timeout=90 --tb=short --cov=interviewbot --cov-report=xml --cov-report=term-missing
         working-directory: backend
         env:
           TEST_DATABASE_URL: postgresql+asyncpg://postgres:testpassword@localhost:5432/interviewbot_test
@@ -108,6 +108,13 @@ jobs:
           OPENAI_API_KEY: sk-test-fake
           STRIPE_SECRET_KEY: sk_test_fake
           STRIPE_WEBHOOK_SECRET: whsec_test_fake
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: backend/coverage.xml
+          retention-days: 14
 
   frontend:
     runs-on: ubuntu-latest
@@ -121,8 +128,9 @@ jobs:
       - run: npm ci
         working-directory: frontend
       - name: Audit dependencies
-        run: npm audit --audit-level=high || true
+        run: npm audit --audit-level=high
         working-directory: frontend
+        continue-on-error: true
       - run: npm run lint
         working-directory: frontend
       - run: npx tsc --noEmit
@@ -163,6 +171,24 @@ jobs:
           path: frontend/playwright-report/
           retention-days: 14
 
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "backend/uv.lock"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+        working-directory: backend
+      - name: Audit Python dependencies
+        run: uv run pip-audit
+        working-directory: backend
+        continue-on-error: true
+
   deploy-backend:
     needs: [backend-full]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -174,9 +200,24 @@ jobs:
         working-directory: backend
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "backend/uv.lock"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+        working-directory: backend
+      - name: Post-deploy health check
+        run: uv run python ../scripts/post_deploy_check.py
+        working-directory: backend
+        continue-on-error: true
+        env:
+          BACKEND_URL: https://interview-bot-giri.fly.dev
 
   deploy-frontend:
-    needs: [frontend]
+    needs: [frontend, frontend-e2e]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:

@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+import ipaddress
+from urllib.parse import urlparse
 from uuid import UUID
+import warnings
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 # --- Enums ---
 
@@ -48,12 +51,12 @@ class SignupRequest(BaseModel):
     org_name: str = Field(..., min_length=2, max_length=255)
     full_name: str = Field(..., min_length=2, max_length=255)
     email: EmailStr
-    password: str = Field(..., min_length=8)
+    password: str = Field(..., min_length=8, max_length=72)
 
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(..., max_length=72)
 
 
 class TokenResponse(BaseModel):
@@ -232,10 +235,49 @@ class PlanResponse(BaseModel):
     allowed_formats: list[str]
 
 
+def _is_private_or_localhost(host: str) -> bool:
+    """Check if host is private IP, localhost, or 0.0.0.0."""
+    if not host:
+        return True
+    host_lower = host.lower().strip()
+    if host_lower in ("localhost", "0.0.0.0", "::1"):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+        return ip.is_private or ip.is_loopback or ip.is_link_local
+    except ValueError:
+        return False
+
+
 class CheckoutRequest(BaseModel):
     plan_id: str
     success_url: str = "http://localhost:3000/settings?billing=success"
     cancel_url: str = "http://localhost:3000/settings?billing=cancelled"
+
+    @field_validator("success_url", "cancel_url")
+    @classmethod
+    def validate_redirect_url(cls, v: str) -> str:
+        parsed = urlparse(v)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError("URL must use http or https scheme")
+        if parsed.scheme == "http" and parsed.hostname != "localhost":
+            raise ValueError("Only https:// or http://localhost allowed for redirect URLs")
+        if "@" in (parsed.netloc or ""):
+            raise ValueError("URL must not contain user-info (e.g. user:pass@host)")
+        domain = parsed.hostname or ""
+        if (
+            domain
+            and not _is_private_or_localhost(domain)
+            and not any(
+                p in domain for p in (".com", ".io", ".co", ".org", ".net", ".app", "localhost")
+            )
+        ):
+            warnings.warn(
+                f"Redirect URL domain '{domain}' does not match expected patterns",
+                UserWarning,
+                stacklevel=2,
+            )
+        return v
 
 
 class CheckoutResponse(BaseModel):
@@ -291,10 +333,42 @@ class InterviewStartResponse(BaseModel):
     message: str
 
 
+class WebhookConfig(BaseModel):
+    url: str = Field(..., min_length=10)
+    events: list[str] = Field(default_factory=lambda: ["interview.completed", "interview.scored"])
+    secret: str = Field("", description="HMAC secret for signature verification")
+
+    @field_validator("url")
+    @classmethod
+    def validate_webhook_url(cls, v: str) -> str:
+        parsed = urlparse(v)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError("Webhook URL must use http or https scheme only")
+        host = (parsed.hostname or "").strip()
+        if not host:
+            raise ValueError("Webhook URL must have a valid host")
+        if _is_private_or_localhost(host):
+            raise ValueError("Webhook URL must not point to private/internal IPs or localhost")
+        return v
+
+
 class WebhookConfigItem(BaseModel):
     url: str
     events: list[str]
     secret: str
+
+    @field_validator("url")
+    @classmethod
+    def validate_webhook_url(cls, v: str) -> str:
+        parsed = urlparse(v)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError("Webhook URL must use http or https scheme only")
+        host = (parsed.hostname or "").strip()
+        if not host:
+            raise ValueError("Webhook URL must have a valid host")
+        if _is_private_or_localhost(host):
+            raise ValueError("Webhook URL must not point to private/internal IPs or localhost")
+        return v
 
 
 class WebhookConfigListResponse(BaseModel):
@@ -317,7 +391,7 @@ class InviteUserRequest(BaseModel):
     email: EmailStr
     full_name: str = Field(..., min_length=2, max_length=255)
     role: UserRole = UserRole.VIEWER
-    password: str = Field(..., min_length=8)
+    password: str = Field(..., min_length=8, max_length=72)
 
 
 class UserResponse(BaseModel):

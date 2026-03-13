@@ -7,13 +7,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends
 import httpx
-from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
 from interviewbot.dependencies import get_db, get_org_id, require_role
 from interviewbot.models.schemas import (
+    WebhookConfig,
     WebhookConfigItem,
     WebhookConfigListResponse,
     WebhookErrorResponse,
@@ -34,12 +34,6 @@ def _mask_secret(wh: dict) -> dict:
     elif s:
         out["secret"] = "***"
     return out
-
-
-class WebhookConfig(BaseModel):
-    url: str = Field(..., min_length=10)
-    events: list[str] = Field(default_factory=lambda: ["interview.completed", "interview.scored"])
-    secret: str = Field("", description="HMAC secret for signature verification")
 
 
 @router.get("/config", response_model=WebhookConfigListResponse)

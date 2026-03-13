@@ -17,7 +17,8 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://hire-with-giri.vercel.app",
+    url:
+      process.env.NEXT_PUBLIC_APP_URL || "https://hire-with-giri.vercel.app",
     siteName: "InterviewBot",
     title: "InterviewBot - AI-Powered Interview Platform",
     description:

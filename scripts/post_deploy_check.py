@@ -10,6 +10,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 
@@ -59,7 +60,11 @@ def frontend_loads(ctx: dict) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Post-deploy sanity checks")
-    parser.add_argument("--api", default=DEFAULT_API, help="Backend API base URL")
+    parser.add_argument(
+        "--api",
+        default=os.environ.get("BACKEND_URL", DEFAULT_API),
+        help="Backend API base URL",
+    )
     parser.add_argument("--frontend", default=DEFAULT_FRONTEND, help="Frontend base URL")
     args = parser.parse_args()
 

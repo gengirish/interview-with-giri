@@ -489,6 +489,7 @@ export default function VoiceInterviewPage() {
                 : "bg-indigo-600 hover:bg-indigo-700",
               (thinking || isPlaying) && "opacity-50 cursor-not-allowed",
             )}
+            aria-label={isRecording ? "Stop recording" : "Start recording"}
           >
             {isRecording ? (
               <MicOff className="h-8 w-8 text-white" />
