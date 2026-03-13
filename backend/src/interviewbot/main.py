@@ -11,6 +11,7 @@ import structlog
 from interviewbot.config import get_settings
 from interviewbot.middleware.tenant import TenantMiddleware
 from interviewbot.routers import (
+    ai_ask,
     analytics,
     ats,
     auth,
@@ -18,10 +19,12 @@ from interviewbot.routers import (
     code_execution,
     comments,
     dashboard,
+    feedback,
     health,
     interviews,
     job_postings,
     organizations,
+    practice,
     proctoring,
     reports,
     templates,
@@ -117,6 +120,9 @@ def create_app() -> FastAPI:
     app.include_router(reports.router, prefix="/api/v1")
     app.include_router(comments.router, prefix="/api/v1")
     app.include_router(analytics.router, prefix="/api/v1")
+    app.include_router(ai_ask.router, prefix="/api/v1")
+    app.include_router(feedback.router, prefix="/api/v1")
+    app.include_router(practice.router, prefix="/api/v1")
     app.include_router(proctoring.router, prefix="/api/v1")
     app.include_router(billing.router, prefix="/api/v1")
     app.include_router(users.router, prefix="/api/v1")

@@ -5,6 +5,7 @@ import {
   MessageSquare,
   Settings,
   LayoutDashboard,
+  Sparkles,
   Users,
 } from "lucide-react";
 import type { UserRole } from "@/hooks/use-auth";
@@ -22,6 +23,7 @@ export const navItems: NavItem[] = [
   { label: "Interviews", href: "/dashboard/interviews", icon: MessageSquare },
   { label: "Reports", href: "/dashboard/reports", icon: FileText },
   { label: "Compare", href: "/dashboard/compare", icon: BarChart3 },
+  { label: "Ask AI", href: "/dashboard/ask-ai", icon: Sparkles },
   { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
   {
     label: "Team",

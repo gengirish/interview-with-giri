@@ -1,27 +1,73 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   api,
   type AnalyticsOverview,
   type JobAnalytics,
 } from "@/lib/api";
 import {
-  BarChart3,
-  Loader2,
-  TrendingUp,
-  Clock,
-  Target,
-  CheckCircle2,
   AlertTriangle,
+  BarChart3,
+  CheckCircle2,
+  Clock,
+  Lightbulb,
+  Loader2,
+  Target,
+  TrendingUp,
+  XCircle,
+  CheckCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+type SkillsInsights = {
+  total_candidates: number;
+  skill_averages: Record<
+    string,
+    { avg: number; min: number; max: number; count: number; std_dev: number }
+  >;
+  behavioral_averages: Record<string, { avg: number; count: number }>;
+  skill_gaps: Array<{ skill: string; avg: number; count: number }>;
+  skill_strengths: Array<{ skill: string; avg: number; count: number }>;
+  recommendations: string[];
+};
 
 export default function AnalyticsPage() {
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
   const [jobStats, setJobStats] = useState<JobAnalytics[]>([]);
+  const [skillsInsights, setSkillsInsights] = useState<SkillsInsights | null>(
+    null,
+  );
+  const [skillsInsightsJobId, setSkillsInsightsJobId] = useState<
+    string | undefined
+  >(undefined);
   const [loading, setLoading] = useState(true);
+  const [skillsLoading, setSkillsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const fetchSkillsInsights = useCallback((jobId?: string) => {
+    setSkillsLoading(true);
+    api
+      .getSkillsInsights(jobId)
+      .then(setSkillsInsights)
+      .catch(() => setSkillsInsights(null))
+      .finally(() => setSkillsLoading(false));
+  }, []);
+
+  const [satisfaction, setSatisfaction] = useState<{
+    total_responses: number;
+    avg_overall: number | null;
+    avg_fairness: number | null;
+    avg_clarity: number | null;
+    avg_relevance: number | null;
+    nps_score: number | null;
+    rating_distribution: Record<string, number>;
+    recent_comments: Array<{
+      comment: string;
+      rating: number;
+      created_at: string;
+    }>;
+  } | null>(null);
 
   const fetchAnalytics = () => {
     setError(null);
@@ -29,11 +75,14 @@ export default function AnalyticsPage() {
     Promise.allSettled([
       api.getAnalyticsOverview(),
       api.getAnalyticsPerJob(),
-    ]).then(([overviewResult, jobStatsResult]) => {
+      api.getCandidateSatisfaction(),
+    ]).then(([overviewResult, jobStatsResult, satisfactionResult]) => {
       const overviewFulfilled = overviewResult.status === "fulfilled";
       const jobStatsFulfilled = jobStatsResult.status === "fulfilled";
       if (overviewFulfilled) setOverview(overviewResult.value);
       if (jobStatsFulfilled) setJobStats(jobStatsResult.value);
+      if (satisfactionResult.status === "fulfilled")
+        setSatisfaction(satisfactionResult.value);
       if (!overviewFulfilled && !jobStatsFulfilled) {
         setError("Failed to load analytics");
       }
@@ -43,6 +92,10 @@ export default function AnalyticsPage() {
   useEffect(() => {
     fetchAnalytics();
   }, []);
+
+  useEffect(() => {
+    fetchSkillsInsights(skillsInsightsJobId);
+  }, [skillsInsightsJobId, fetchSkillsInsights]);
 
   if (loading) {
     return (
@@ -81,7 +134,11 @@ export default function AnalyticsPage() {
     );
   }
 
-  if (!overview && jobStats.length === 0) {
+  if (
+    !overview &&
+    jobStats.length === 0 &&
+    (!satisfaction || satisfaction.total_responses === 0)
+  ) {
     return (
       <div className="space-y-6">
         <div>
@@ -291,6 +348,338 @@ export default function AnalyticsPage() {
           </>
         );
       })()}
+
+      {/* Candidate Experience */}
+      {satisfaction && satisfaction.total_responses > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-900 mb-4">
+            Candidate Experience
+          </h3>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="text-center">
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                NPS Score
+              </p>
+              <p
+                className={cn(
+                  "mt-1 text-4xl font-bold",
+                  satisfaction.nps_score != null
+                    ? satisfaction.nps_score > 50
+                      ? "text-green-600"
+                      : satisfaction.nps_score >= 0
+                        ? "text-amber-600"
+                        : "text-red-600"
+                    : "text-slate-400",
+                )}
+              >
+                {satisfaction.nps_score != null
+                  ? satisfaction.nps_score.toFixed(1)
+                  : "N/A"}
+              </p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {satisfaction.total_responses} response
+                {satisfaction.total_responses !== 1 ? "s" : ""}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">
+                Average Ratings
+              </p>
+              <div className="space-y-1.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Overall</span>
+                  <span className="font-medium text-slate-900">
+                    {satisfaction.avg_overall?.toFixed(1) ?? "N/A"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Fairness</span>
+                  <span className="font-medium text-slate-900">
+                    {satisfaction.avg_fairness?.toFixed(1) ?? "N/A"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Clarity</span>
+                  <span className="font-medium text-slate-900">
+                    {satisfaction.avg_clarity?.toFixed(1) ?? "N/A"}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Relevance</span>
+                  <span className="font-medium text-slate-900">
+                    {satisfaction.avg_relevance?.toFixed(1) ?? "N/A"}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="lg:col-span-2">
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">
+                Rating Distribution
+              </p>
+              <div className="space-y-2">
+                {["5", "4", "3", "2", "1"].map((r) => {
+                  const count =
+                    satisfaction.rating_distribution[r] ?? 0;
+                  const maxCount = Math.max(
+                    ...Object.values(satisfaction.rating_distribution),
+                    1,
+                  );
+                  return (
+                    <div
+                      key={r}
+                      className="flex items-center gap-3"
+                    >
+                      <span className="w-4 text-xs font-medium text-slate-600">
+                        {r}
+                      </span>
+                      <div className="flex-1 h-5 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-indigo-500 transition-all duration-500"
+                          style={{
+                            width: `${(count / maxCount) * 100}%`,
+                          }}
+                        />
+                      </div>
+                      <span className="w-6 text-right text-xs font-medium text-slate-700">
+                        {count}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          {satisfaction.recent_comments.length > 0 && (
+            <div className="mt-6 pt-6 border-t border-slate-200">
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">
+                Recent Comments
+              </p>
+              <ul className="space-y-2 max-h-32 overflow-y-auto">
+                {satisfaction.recent_comments.map((c, i) => (
+                  <li
+                    key={i}
+                    className="text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2"
+                  >
+                    <span className="font-medium text-amber-600">
+                      {c.rating}/5
+                    </span>{" "}
+                    {c.comment}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Skills Insights */}
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="flex flex-col gap-4 border-b border-slate-200 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="text-sm font-semibold text-slate-900">
+            Skills Insights
+          </h3>
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-medium text-slate-600">
+              Job filter:
+            </label>
+            <select
+              value={skillsInsightsJobId ?? ""}
+              onChange={(e) =>
+                setSkillsInsightsJobId(e.target.value || undefined)
+              }
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              <option value="">All jobs</option>
+              {jobStats.map((j) => (
+                <option key={j.job_id} value={j.job_id}>
+                  {j.title}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <div className="p-6">
+          {skillsLoading ? (
+            <div className="flex h-48 items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+            </div>
+          ) : !skillsInsights || skillsInsights.total_candidates === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+              <BarChart3 className="mx-auto h-10 w-10 text-slate-300" />
+              <p className="mt-2 text-sm text-slate-500">
+                No skills data yet. Complete interviews with reports to see
+                insights.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Skill Heatmap */}
+              {Object.keys(skillsInsights.skill_averages).length > 0 && (
+                <div>
+                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Skill Heatmap
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                    {Object.entries(skillsInsights.skill_averages).map(
+                      ([skill, data]) => {
+                        const avg = data.avg;
+                        const heatColor =
+                          avg < 5
+                            ? "bg-red-500 text-white"
+                            : avg < 7
+                              ? "bg-amber-400 text-slate-900"
+                              : "bg-emerald-500 text-white";
+                        return (
+                          <div
+                            key={skill}
+                            className={cn(
+                              "rounded-lg px-3 py-2 text-center text-sm font-medium",
+                              heatColor,
+                            )}
+                            title={`${skill}: avg ${avg}, min ${data.min}, max ${data.max} (n=${data.count})`}
+                          >
+                            <div className="truncate font-medium">
+                              {skill.replace(/_/g, " ")}
+                            </div>
+                            <div className="text-xs opacity-90">
+                              {avg.toFixed(1)}/10
+                            </div>
+                          </div>
+                        );
+                      },
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-6 sm:grid-cols-2">
+                {/* Skills Gaps */}
+                <div className="rounded-lg border border-red-200 bg-red-50/50 p-4">
+                  <h4 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-red-700">
+                    <XCircle className="h-4 w-4" />
+                    Skills Gaps (avg &lt; 5.0)
+                  </h4>
+                  {skillsInsights.skill_gaps.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      No significant gaps identified.
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {skillsInsights.skill_gaps.map((g) => (
+                        <li
+                          key={g.skill}
+                          className="flex items-center justify-between rounded bg-white px-3 py-2 text-sm text-red-800"
+                        >
+                          <span>
+                            {g.skill.replace(/_/g, " ")} (n={g.count})
+                          </span>
+                          <span className="font-semibold">
+                            {g.avg.toFixed(1)}/10
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                {/* Skills Strengths */}
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4">
+                  <h4 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-700">
+                    <CheckCircle className="h-4 w-4" />
+                    Skills Strengths (avg ≥ 7.0)
+                  </h4>
+                  {skillsInsights.skill_strengths.length === 0 ? (
+                    <p className="text-sm text-slate-500">
+                      No standout strengths yet.
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {skillsInsights.skill_strengths.map((s) => (
+                        <li
+                          key={s.skill}
+                          className="flex items-center justify-between rounded bg-white px-3 py-2 text-sm text-emerald-800"
+                        >
+                          <span>
+                            {s.skill.replace(/_/g, " ")} (n={s.count})
+                          </span>
+                          <span className="font-semibold">
+                            {s.avg.toFixed(1)}/10
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+              {/* AI Recommendations */}
+              {skillsInsights.recommendations.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+                  <h4 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-800">
+                    <Lightbulb className="h-4 w-4" />
+                    AI Recommendations
+                  </h4>
+                  <ul className="space-y-2">
+                    {skillsInsights.recommendations.map((rec, i) => (
+                      <li
+                        key={i}
+                        className="flex gap-2 rounded bg-white px-3 py-2 text-sm text-slate-700"
+                      >
+                        <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                        {rec}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Behavioral Averages */}
+              {Object.keys(skillsInsights.behavioral_averages).length > 0 && (
+                <div>
+                  <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Behavioral Dimension Averages
+                  </h4>
+                  <div className="space-y-2">
+                    {Object.entries(skillsInsights.behavioral_averages).map(
+                      ([dim, data]) => {
+                        const avg = data.avg;
+                        const maxVal = 10;
+                        const pct = (avg / maxVal) * 100;
+                        return (
+                          <div
+                            key={dim}
+                            className="flex items-center gap-3"
+                          >
+                            <span className="w-40 truncate text-sm font-medium text-slate-700">
+                              {dim.replace(/_/g, " ")}
+                            </span>
+                            <div className="flex-1 h-5 overflow-hidden rounded-full bg-slate-200">
+                              <div
+                                className={cn(
+                                  "h-full rounded-full transition-all",
+                                  avg < 5
+                                    ? "bg-red-500"
+                                    : avg < 7
+                                      ? "bg-amber-500"
+                                      : "bg-emerald-500",
+                                )}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="w-12 text-right text-sm font-semibold text-slate-700">
+                              {avg.toFixed(1)}
+                            </span>
+                          </div>
+                        );
+                      },
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Per-Job Analytics */}
       {jobStats.length > 0 && (

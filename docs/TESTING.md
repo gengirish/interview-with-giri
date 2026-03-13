@@ -52,7 +52,7 @@ export TOKEN="<access_token from response>"
 ```bash
 curl -X POST https://interview-with-giri-api.fly.dev/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email": "admin@testcorp.com", "password": "securepassword123"}'
+  -d '{"email": "admin@testcorp.com", "password": "![1773422293767](image/TESTING/1773422293767.png)"}'
 ```
 
 **Expected**: `200 OK` with `access_token`.

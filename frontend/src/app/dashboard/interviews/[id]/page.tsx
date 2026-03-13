@@ -34,6 +34,8 @@ import {
   Trash2,
   Send,
   Users,
+  Zap,
+  TrendingUp,
 } from "lucide-react";
 import { cn, formatDuration, formatDate } from "@/lib/utils";
 import Link from "next/link";
@@ -131,6 +133,32 @@ function formatFlagName(flag: string): string {
   return flag.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+const HIGHLIGHT_TYPE_COLORS: Record<string, string> = {
+  strong_answer: "bg-emerald-500",
+  weak_answer: "bg-red-500",
+  creative_thinking: "bg-violet-500",
+  red_flag: "bg-red-500",
+  coding_breakthrough: "bg-blue-500",
+  deep_insight: "bg-indigo-500",
+  struggle: "bg-amber-500",
+  growth_moment: "bg-teal-500",
+};
+
+function getHighlightColor(type: string): string {
+  return HIGHLIGHT_TYPE_COLORS[type] ?? "bg-slate-500";
+}
+
+const DIFFICULTY_COLORS: Record<string, string> = {
+  easy: "bg-emerald-500",
+  medium: "bg-yellow-500",
+  hard: "bg-orange-500",
+  expert: "bg-red-500",
+};
+
+function getDifficultyColor(d: string): string {
+  return DIFFICULTY_COLORS[d?.toLowerCase()] ?? "bg-slate-400";
+}
+
 function formatDurationMs(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
   const m = Math.floor(totalSeconds / 60);
@@ -184,9 +212,21 @@ export default function InterviewDetailPage() {
   const [integrity, setIntegrity] = useState<IntegrityAssessment | null | "none">(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
-  const [activeTab, setActiveTab] = useState<"scorecard" | "integrity" | "transcript">(
-    "scorecard",
-  );
+  const [activeTab, setActiveTab] = useState<
+    "scorecard" | "integrity" | "transcript" | "highlights"
+  >("scorecard");
+  const [highlights, setHighlights] = useState<
+    Array<{
+      message_index: number;
+      type: string;
+      label: string;
+      summary: string;
+      speaker: string;
+      timestamp?: string;
+      content_preview?: string;
+    }>
+  >([]);
+  const [highlightsLoading, setHighlightsLoading] = useState(false);
   const [comments, setComments] = useState<
     Array<{
       id: string;
@@ -215,6 +255,17 @@ export default function InterviewDetailPage() {
       setComments([]);
     }
   }
+
+  useEffect(() => {
+    if (activeTab === "highlights" && session?.status === "completed") {
+      setHighlightsLoading(true);
+      api
+        .getHighlights(id)
+        .then((res) => setHighlights(res.highlights))
+        .catch(() => setHighlights([]))
+        .finally(() => setHighlightsLoading(false));
+    }
+  }, [activeTab, id, session?.status]);
 
   useEffect(() => {
     async function load() {
@@ -593,11 +644,26 @@ export default function InterviewDetailPage() {
           <MessageSquare className="h-4 w-4" />
           Transcript ({messages.length})
         </button>
+        <button
+          role="tab"
+          aria-selected={activeTab === "highlights"}
+          onClick={() => setActiveTab("highlights")}
+          className={cn(
+            "flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+            activeTab === "highlights"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-600 hover:text-slate-900",
+          )}
+        >
+          <Zap className="h-4 w-4" />
+          Highlights
+        </button>
       </div>
 
       {/* Tab content */}
-      {activeTab === "scorecard" &&
-        (report ? (
+      {activeTab === "scorecard" && (
+        <>
+        {report ? (
           <div className="space-y-6">
             {/* Export buttons */}
             <div className="flex gap-2">
@@ -854,7 +920,37 @@ export default function InterviewDetailPage() {
               Generate Report
             </button>
           </div>
-        ))}
+        )}
+
+        {/* Difficulty Progression - shown when available */}
+        {session?.difficulty_progression &&
+          session.difficulty_progression.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900 mb-4">
+                <TrendingUp className="h-4 w-4 text-indigo-600" />
+                Difficulty Progression
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {session.difficulty_progression.map(
+                  (p: { question?: number; difficulty?: string }, i: number) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-white",
+                        getDifficultyColor(p.difficulty ?? "medium"),
+                      )}
+                      title={`Question ${p.question ?? i + 1}: ${p.difficulty ?? "medium"}`}
+                    >
+                      <span className="text-xs opacity-90">Q{p.question ?? i + 1}</span>
+                      <span className="capitalize">{p.difficulty ?? "medium"}</span>
+                    </div>
+                  ),
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {activeTab === "integrity" && (
         integrity && integrity !== "none" ? (
@@ -1096,13 +1192,76 @@ export default function InterviewDetailPage() {
         )
       )}
 
+      {activeTab === "highlights" && (
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-200 px-6 py-4">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+              <Zap className="h-4 w-4 text-amber-500" />
+              AI Highlights
+            </h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Key moments identified for hiring manager review
+            </p>
+          </div>
+          <div className="p-6">
+            {highlightsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+              </div>
+            ) : highlights.length === 0 ? (
+              <p className="py-8 text-center text-sm text-slate-500">
+                No highlights available. Complete the interview and generate a report first.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {highlights.map((h, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById(`msg-${h.message_index}`);
+                      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      setActiveTab("transcript");
+                    }}
+                    className="w-full text-left rounded-lg border border-slate-200 p-4 hover:bg-slate-50 hover:border-indigo-200 transition-colors"
+                  >
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span
+                        className={cn(
+                          "inline-flex h-2 w-2 rounded-full shrink-0",
+                          getHighlightColor(h.type),
+                        )}
+                      />
+                      <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium text-white", getHighlightColor(h.type))}>
+                        {h.type.replace(/_/g, " ")}
+                      </span>
+                      <span className="text-sm font-medium text-slate-900">{h.label}</span>
+                    </div>
+                    <p className="text-sm text-slate-600">{h.summary}</p>
+                    {h.content_preview && (
+                      <p className="mt-2 text-xs text-slate-500 italic truncate">
+                        &ldquo;{h.content_preview}...&rdquo;
+                      </p>
+                    )}
+                    <p className="mt-1 text-xs text-slate-400">
+                      Message #{h.message_index + 1} &middot; {h.speaker}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {activeTab === "transcript" && (
         <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="divide-y divide-slate-100">
-            {messages.map((msg) => (
+            {messages.map((msg, idx) => (
               <div
                 key={msg.id}
-                className={cn("px-6 py-4", msg.role === "interviewer" ? "bg-slate-50/50" : "")}
+                id={`msg-${idx}`}
+                className={cn("px-6 py-4 scroll-mt-24", msg.role === "interviewer" ? "bg-slate-50/50" : "")}
               >
                 <div className="flex flex-wrap items-center gap-2 mb-1">
                   <span

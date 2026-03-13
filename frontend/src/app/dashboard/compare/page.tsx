@@ -8,9 +8,11 @@ import {
   ChevronUp,
   Download,
   Eye,
+  FileText,
   Filter,
   Loader2,
   Star,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -79,6 +81,9 @@ export default function ComparePage() {
   const [sortKey, setSortKey] = useState<SortKey>("overall_score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [debriefContent, setDebriefContent] = useState<string | null>(null);
+  const [debriefLoading, setDebriefLoading] = useState(false);
+  const [showDebrief, setShowDebrief] = useState(false);
 
   const loadJobs = useCallback(async () => {
     try {
@@ -205,6 +210,33 @@ export default function ComparePage() {
       .map((c, i) => [c.session_id, i + 1] as const),
   );
 
+  const handleGenerateDebrief = async () => {
+    let selectedIds = candidates
+      .filter((c) => c.is_shortlisted)
+      .map((c) => c.session_id);
+    if (selectedIds.length < 2) {
+      selectedIds = candidates
+        .sort((a, b) => (b.overall_score || 0) - (a.overall_score || 0))
+        .slice(0, Math.min(5, candidates.length))
+        .map((c) => c.session_id);
+    }
+    const uniqueIds = [...new Set(selectedIds)].slice(0, 5);
+    if (uniqueIds.length < 2) {
+      toast.error("Need at least 2 candidates for a debrief");
+      return;
+    }
+    setDebriefLoading(true);
+    try {
+      const result = await api.generateDebrief(uniqueIds);
+      setDebriefContent(result.debrief);
+      setShowDebrief(true);
+    } catch (e) {
+      toast.error("Failed to generate debrief");
+    } finally {
+      setDebriefLoading(false);
+    }
+  };
+
   const exportCSV = () => {
     const headers = [
       "Name",
@@ -296,14 +328,28 @@ export default function ComparePage() {
           </label>
         </div>
 
-        <button
-          onClick={exportCSV}
-          disabled={sorted.length === 0}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
-        >
-          <Download className="h-4 w-4" />
-          Export CSV
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleGenerateDebrief}
+            disabled={candidates.length < 2 || debriefLoading}
+            className="inline-flex items-center gap-2 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 shadow-sm hover:bg-indigo-100 disabled:opacity-50"
+          >
+            {debriefLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileText className="h-4 w-4" />
+            )}
+            Generate AI Debrief
+          </button>
+          <button
+            onClick={exportCSV}
+            disabled={sorted.length === 0}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
+          </button>
+        </div>
       </div>
 
       {loadingCandidates ? (
@@ -486,6 +532,39 @@ export default function ComparePage() {
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Debrief Modal */}
+      {showDebrief && debriefContent && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-white">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
+            <h2 className="text-lg font-semibold text-slate-900">AI Hiring Debrief</h2>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <Download className="h-4 w-4" />
+                Download PDF
+              </button>
+              <button
+                onClick={() => {
+                  setShowDebrief(false);
+                  setDebriefContent(null);
+                }}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <X className="h-4 w-4" />
+                Close
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto p-6">
+            <pre className="mx-auto max-w-3xl whitespace-pre-wrap rounded-lg bg-slate-50 p-6 font-sans text-sm leading-relaxed text-slate-800">
+              {debriefContent}
+            </pre>
           </div>
         </div>
       )}

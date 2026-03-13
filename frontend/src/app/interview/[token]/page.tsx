@@ -12,6 +12,7 @@ import {
   CheckCircle,
   FileText,
   Upload,
+  Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { InterviewPhase } from "@/lib/types";
@@ -49,6 +50,16 @@ export default function CandidateInterviewPage() {
 
   const [reconnecting, setReconnecting] = useState(false);
   const [, setReconnectFailed] = useState(false);
+  const [isPractice, setIsPractice] = useState(false);
+
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [overallRating, setOverallRating] = useState(0);
+  const [fairnessRating, setFairnessRating] = useState(0);
+  const [clarityRating, setClarityRating] = useState(0);
+  const [relevanceRating, setRelevanceRating] = useState(0);
+  const [feedbackComment, setFeedbackComment] = useState("");
 
   const wsRef = useRef<WebSocket | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -64,6 +75,9 @@ export default function CandidateInterviewPage() {
     async function load() {
       try {
         const data = await api.getPublicInterview(token);
+        const practice = Boolean(data.is_practice);
+        setIsPractice(practice);
+
         if (data.status === "completed") {
           setPhase("completed");
           return;
@@ -90,7 +104,11 @@ export default function CandidateInterviewPage() {
         setBranding(
           (data.branding as { logo_url?: string; primary_color?: string; company_name?: string; tagline?: string }) ?? null,
         );
-        setPhase("consent");
+        if (practice) {
+          setPhase("ready");
+        } else {
+          setPhase("consent");
+        }
       } catch {
         setError("Interview not found or link expired.");
         setPhase("error");
@@ -168,11 +186,21 @@ export default function CandidateInterviewPage() {
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
 
-      if (data.type === "question") {
+      if (data.type === "question" || data.type === "code_review") {
         setMessages((m) => [...m, { role: "interviewer", content: data.content }]);
         setThinking(false);
         setProgress(data.progress || 0);
         setTotal(data.total || 10);
+      } else if (data.type === "practice_complete") {
+        if (data.content) {
+          setMessages((m) => [...m, { role: "interviewer", content: data.content }]);
+        }
+        setIsPractice(true);
+        intentionalCloseRef.current = true;
+        interviewActiveRef.current = false;
+        setPhase("completed");
+        ws.close();
+        if (timerRef.current) clearInterval(timerRef.current);
       } else if (data.type === "thinking") {
         setThinking(true);
       } else if (data.type === "end") {
@@ -291,22 +319,172 @@ export default function CandidateInterviewPage() {
   }
 
   if (phase === "completed") {
+    if (isPractice) {
+      return (
+        <div className="flex h-screen items-center justify-center bg-slate-950 p-4">
+          <div className="max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-8 text-center">
+            <CheckCircle className="mx-auto h-12 w-12 text-green-400" />
+            <h2 className="mt-4 text-xl font-bold text-white">
+              Practice Complete!
+            </h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Review your answers above to identify areas for improvement.
+            </p>
+            {elapsed > 0 && (
+              <p className="mt-3 text-xs text-slate-500">
+                Duration: {formatTime(elapsed)}
+              </p>
+            )}
+            <button
+              onClick={() => router.push("/practice")}
+              className="mt-6 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-8 py-3 text-sm font-medium text-white transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    async function handleFeedbackSubmit(e: React.FormEvent) {
+      e.preventDefault();
+      if (overallRating < 1 || !token) return;
+      setFeedbackLoading(true);
+      setFeedbackError(null);
+      try {
+        await api.submitFeedback(token, {
+          overall_rating: overallRating,
+          ...(fairnessRating > 0 && { fairness_rating: fairnessRating }),
+          ...(clarityRating > 0 && { clarity_rating: clarityRating }),
+          ...(relevanceRating > 0 && { relevance_rating: relevanceRating }),
+          ...(feedbackComment.trim() && { comment: feedbackComment.trim() }),
+        });
+        setFeedbackSubmitted(true);
+      } catch {
+        setFeedbackError("Failed to submit feedback. Please try again.");
+      } finally {
+        setFeedbackLoading(false);
+      }
+    }
+
+    function StarRating({
+      value,
+      onChange,
+      size = "sm",
+    }: {
+      value: number;
+      onChange: (v: number) => void;
+      size?: "sm" | "md";
+    }) {
+      const sizeClass = size === "md" ? "h-8 w-8" : "h-5 w-5";
+      return (
+        <div className="flex gap-1">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onChange(i)}
+              className="p-0.5 transition-colors hover:scale-110"
+              aria-label={`${i} star${i > 1 ? "s" : ""}`}
+            >
+              <Star
+                className={cn(
+                  sizeClass,
+                  value >= i ? "text-amber-400 fill-amber-400" : "text-slate-600",
+                )}
+              />
+            </button>
+          ))}
+        </div>
+      );
+    }
+
+    if (feedbackSubmitted) {
+      return (
+        <div className="flex h-screen items-center justify-center bg-slate-950 p-4">
+          <div className="max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-8 text-center">
+            <CheckCircle className="mx-auto h-12 w-12 text-green-400" />
+            <h2 className="mt-4 text-xl font-bold text-white">
+              Thank you!
+            </h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Your feedback has been recorded. We appreciate you taking the time
+              to help us improve.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-950 p-4">
-        <div className="max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-8 text-center">
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 p-4">
+        <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-8">
           <CheckCircle className="mx-auto h-12 w-12 text-green-400" />
-          <h2 className="mt-4 text-xl font-bold text-white">
+          <h2 className="mt-4 text-xl font-bold text-white text-center">
             Interview Complete
           </h2>
-          <p className="mt-2 text-sm text-slate-400">
-            Thank you for completing the interview! Your responses have been
-            recorded and will be reviewed by the hiring team.
+          <p className="mt-2 text-sm text-slate-400 text-center">
+            Thank you for completing the interview! How was your experience?
           </p>
           {elapsed > 0 && (
-            <p className="mt-3 text-xs text-slate-500">
+            <p className="mt-3 text-xs text-slate-500 text-center">
               Duration: {formatTime(elapsed)}
             </p>
           )}
+          <form onSubmit={handleFeedbackSubmit} className="mt-6 space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Overall experience (required)
+              </label>
+              <StarRating value={overallRating} onChange={setOverallRating} size="md" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Fairness
+              </label>
+              <StarRating value={fairnessRating} onChange={setFairnessRating} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Clarity
+              </label>
+              <StarRating value={clarityRating} onChange={setClarityRating} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Relevance
+              </label>
+              <StarRating value={relevanceRating} onChange={setRelevanceRating} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Comments (optional)
+              </label>
+              <textarea
+                value={feedbackComment}
+                onChange={(e) => setFeedbackComment(e.target.value)}
+                rows={3}
+                maxLength={1000}
+                className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none resize-none"
+                placeholder="Any additional feedback?"
+              />
+            </div>
+            {feedbackError && (
+              <p className="text-xs text-red-400">{feedbackError}</p>
+            )}
+            <button
+              type="submit"
+              disabled={feedbackLoading || overallRating < 1}
+              className="w-full rounded-lg py-2.5 text-sm font-medium text-white transition-colors disabled:opacity-50"
+              style={{ backgroundColor: primaryColor }}
+            >
+              {feedbackLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+              ) : (
+                "Submit Feedback"
+              )}
+            </button>
+          </form>
         </div>
       </div>
     );

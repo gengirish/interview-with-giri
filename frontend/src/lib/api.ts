@@ -152,6 +152,7 @@ export interface InterviewSession {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
+  difficulty_progression?: Array<{ question: number; difficulty: string }> | null;
 }
 
 export interface DashboardStats {
@@ -433,6 +434,19 @@ export const api = {
     }),
   getReport: (sessionId: string) =>
     request<CandidateReport>(`/api/v1/reports/${sessionId}`),
+  getHighlights: (sessionId: string) =>
+    request<{
+      highlights: Array<{
+        message_index: number;
+        type: string;
+        label: string;
+        summary: string;
+        speaker: string;
+        timestamp?: string;
+        content_preview?: string;
+      }>;
+      session_id: string;
+    }>(`/api/v1/reports/${sessionId}/highlights`),
   shareReport: (sessionId: string, hours?: number) =>
     request<{ share_url: string; share_token: string; expires_at: string }>(
       `/api/v1/reports/${sessionId}/share?hours=${hours ?? 72}`,
@@ -479,6 +493,16 @@ export const api = {
       method: "DELETE",
     }),
 
+  // AI Debrief
+  generateDebrief: (sessionIds: string[]) =>
+    request<{
+      debrief: string;
+      candidates: Array<{ name: string; score: number | null }>;
+    }>("/api/v1/reports/debrief", {
+      method: "POST",
+      body: JSON.stringify({ session_ids: sessionIds }),
+    }),
+
   exportReportCSVBlob: async (sessionId: string): Promise<Blob> => {
     const token =
       typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -514,11 +538,73 @@ export const api = {
       method: "DELETE",
     }),
 
+  // Ask AI
+  askAI: (query: string, jobId?: string) =>
+    request<{
+      answer: string;
+      citations: Array<{
+        session_id: string;
+        candidate_name: string | null;
+        content_snippet: string;
+        source_type: string;
+      }>;
+      sessions_searched: number;
+    }>("/api/v1/ai/ask", {
+      method: "POST",
+      body: JSON.stringify({ query, job_id: jobId || undefined }),
+    }),
+
+  // Candidate Feedback
+  submitFeedback: (
+    token: string,
+    data: {
+      overall_rating: number;
+      fairness_rating?: number;
+      clarity_rating?: number;
+      relevance_rating?: number;
+      comment?: string;
+    },
+  ) =>
+    request<{ id: string; message: string }>(
+      `/api/v1/interviews/public/${token}/feedback`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  getCandidateSatisfaction: (jobId?: string) =>
+    request<{
+      total_responses: number;
+      avg_overall: number | null;
+      avg_fairness: number | null;
+      avg_clarity: number | null;
+      avg_relevance: number | null;
+      nps_score: number | null;
+      rating_distribution: Record<string, number>;
+      recent_comments: Array<{
+        comment: string;
+        rating: number;
+        created_at: string;
+      }>;
+    }>(
+      `/api/v1/analytics/candidate-satisfaction${jobId ? `?job_id=${jobId}` : ""}`,
+    ),
+
   // Analytics
   getAnalyticsOverview: () =>
     request<AnalyticsOverview>("/api/v1/analytics/overview"),
   getAnalyticsPerJob: () =>
     request<JobAnalytics[]>("/api/v1/analytics/per-job"),
+  // Skills Insights
+  getSkillsInsights: (jobId?: string) =>
+    request<{
+      total_candidates: number;
+      skill_averages: Record<
+        string,
+        { avg: number; min: number; max: number; count: number; std_dev: number }
+      >;
+      behavioral_averages: Record<string, { avg: number; count: number }>;
+      skill_gaps: Array<{ skill: string; avg: number; count: number }>;
+      skill_strengths: Array<{ skill: string; avg: number; count: number }>;
+      recommendations: string[];
+    }>(`/api/v1/analytics/skills-insights${jobId ? `?job_id=${jobId}` : ""}`),
 
   // Comparison
   compareCandidates: (jobId: string) =>
@@ -577,6 +663,31 @@ export const api = {
   // Public Interview
   getPublicInterview: (token: string) =>
     request<Record<string, unknown>>(`/api/v1/interviews/public/${token}`),
+
+  // Practice Mode
+  startPractice: (data: {
+    template_id?: string;
+    role_type?: string;
+    candidate_name?: string;
+  }) =>
+    request<{
+      token: string;
+      interview_url: string;
+      format: string;
+      role_type: string;
+    }>("/api/v1/practice/start", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getPracticeTemplates: () =>
+    request<
+      Array<{
+        id: string;
+        name: string;
+        role_type: string;
+        description: string;
+      }>
+    >("/api/v1/practice/templates"),
   startInterview: (
     token: string,
     data: { candidate_name: string; candidate_email: string },

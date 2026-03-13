@@ -154,6 +154,7 @@ class InterviewSessionResponse(BaseModel):
     started_at: datetime | None
     completed_at: datetime | None
     created_at: datetime
+    difficulty_progression: list[dict] | None = None
 
 
 class InterviewMessageResponse(BaseModel):
@@ -339,6 +340,7 @@ class PublicInterviewInfoResponse(BaseModel):
     job_description: str
     interview_config: dict
     branding: BrandingInfo = Field(default_factory=BrandingInfo)
+    is_practice: bool = False
 
 
 class InterviewStartResponse(BaseModel):

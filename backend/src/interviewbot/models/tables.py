@@ -113,6 +113,10 @@ class InterviewSession(Base):
     resume_url = Column(Text, nullable=True)
     is_shortlisted = Column(Boolean, default=False)
     scheduled_at = Column(DateTime(timezone=True), nullable=True)
+    difficulty_progression = Column(
+        JSONB, nullable=True
+    )  # [{question: 1, difficulty: "medium", ...}]
+    is_practice = Column(Boolean, default=False)
     status = Column(String(30), default="pending", index=True)
     format = Column(String(20), default="text")
     overall_score = Column(Numeric(4, 2))
@@ -212,3 +216,21 @@ class ReportComment(Base):
     mentioned_user_ids = Column(JSONB, default=list)
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class CandidateFeedback(Base):
+    __tablename__ = "candidate_feedback"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("interview_session.id"),
+        unique=True,
+        nullable=False,
+    )
+    overall_rating = Column(Integer, nullable=False)  # 1-5
+    fairness_rating = Column(Integer, nullable=True)  # 1-5
+    clarity_rating = Column(Integer, nullable=True)  # 1-5
+    relevance_rating = Column(Integer, nullable=True)  # 1-5
+    comment = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)

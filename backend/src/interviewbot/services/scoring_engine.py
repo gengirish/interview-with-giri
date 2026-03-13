@@ -115,6 +115,20 @@ async def score_interview(session_id: str, db: AsyncSession) -> CandidateReport 
     await db.commit()
     await db.refresh(report)
 
+    # Generate highlights
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        from interviewbot.services.highlight_engine import generate_highlights
+
+        highlights = await generate_highlights(str(session.id), db)
+        if highlights:
+            report.extended_data = {
+                **(report.extended_data or {}),
+                "highlights": highlights,
+            }
+            await db.commit()
+
     logger.info(
         "interview_scored",
         session_id=session_id,

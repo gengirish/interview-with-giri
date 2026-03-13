@@ -6,7 +6,7 @@ import io
 import secrets
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -82,6 +82,163 @@ async def list_reports(
         page=page,
         per_page=per_page,
     )
+
+
+@router.post("/debrief")
+async def generate_debrief(
+    body: dict = Body(...),
+    user: dict = Depends(require_role("admin", "hiring_manager")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate an AI hiring debrief comparing multiple candidates."""
+    session_ids = body.get("session_ids", [])
+    if len(session_ids) < 2:
+        raise HTTPException(400, "At least 2 candidates required for a debrief")
+    if len(session_ids) > 5:
+        raise HTTPException(400, "Maximum 5 candidates per debrief")
+
+    org_id = UUID(str(user.get("org_id", "")))
+
+    from interviewbot.models.tables import ReportComment
+
+    candidates_data = []
+    for sid in session_ids:
+        try:
+            sid_uuid = UUID(str(sid))
+        except (ValueError, TypeError):
+            continue
+
+        session_result = await db.execute(
+            select(InterviewSession).where(
+                InterviewSession.id == sid_uuid,
+                InterviewSession.org_id == org_id,
+            )
+        )
+        session = session_result.scalar_one_or_none()
+        if not session:
+            continue
+
+        report_result = await db.execute(
+            select(CandidateReport).where(CandidateReport.session_id == sid_uuid)
+        )
+        report = report_result.scalar_one_or_none()
+
+        comments = []
+        if report:
+            comment_result = await db.execute(
+                select(ReportComment).where(ReportComment.report_id == report.id)
+            )
+            comments = [c.content for c in comment_result.scalars().all()]
+
+        candidates_data.append(
+            {
+                "name": session.candidate_name or "Unknown",
+                "email": session.candidate_email or "",
+                "score": float(session.overall_score) if session.overall_score else None,
+                "duration_minutes": (
+                    round(session.duration_seconds / 60, 1) if session.duration_seconds else None
+                ),
+                "format": session.format,
+                "report": {
+                    "summary": report.ai_summary if report else None,
+                    "strengths": report.strengths if report else [],
+                    "concerns": report.concerns if report else [],
+                    "recommendation": report.recommendation if report else None,
+                    "confidence": (
+                        float(report.confidence_score)
+                        if report and report.confidence_score
+                        else None
+                    ),
+                    "skill_scores": report.skill_scores if report else {},
+                    "behavioral_scores": report.behavioral_scores if report else {},
+                }
+                if report
+                else None,
+                "team_comments": comments,
+            }
+        )
+
+    if len(candidates_data) < 2:
+        raise HTTPException(400, "Could not find enough valid candidate sessions")
+
+    candidates_context = ""
+    for i, c in enumerate(candidates_data, 1):
+        candidates_context += f"\n### Candidate {i}: {c['name']}\n"
+        candidates_context += f"- Score: {c['score']}/10\n"
+        candidates_context += f"- Duration: {c['duration_minutes']} min\n"
+        if c["report"]:
+            r = c["report"]
+            candidates_context += f"- Recommendation: {r['recommendation']}\n"
+            candidates_context += f"- Confidence: {r['confidence']}\n"
+            candidates_context += f"- Summary: {r['summary']}\n"
+            candidates_context += f"- Strengths: {', '.join(r['strengths'])}\n"
+            candidates_context += f"- Concerns: {', '.join(r['concerns'])}\n"
+            if r["skill_scores"]:
+                for skill, data in r["skill_scores"].items():
+                    score = data.get("score", "N/A") if isinstance(data, dict) else data
+                    candidates_context += f"  - {skill}: {score}/10\n"
+        if c["team_comments"]:
+            candidates_context += f"- Team Comments: {'; '.join(c['team_comments'][:5])}\n"
+
+    table_header = " | ".join(c["name"] for c in candidates_data)
+    table_sep = "|".join(["---"] * len(candidates_data))
+
+    prompt = f"""You are a hiring committee advisor. Generate a structured debrief
+document comparing these candidates.
+
+## Candidates
+{candidates_context}
+
+## Required Output Format (Markdown)
+
+# Hiring Debrief
+
+## Executive Summary
+[2-3 paragraph overview of the candidate pool, overall quality, and key differentiators]
+
+## Side-by-Side Comparison
+
+| Dimension | {table_header} |
+|-----------|{table_sep}|
+[Fill in key dimensions with scores and brief notes]
+
+## Individual Assessments
+
+[For each candidate:]
+### [Name]
+- **Overall Score:** X/10
+- **Key Strengths:** [bullets]
+- **Key Risks:** [bullets]
+- **Best Fit For:** [role/team suggestion]
+
+## Risk Assessment
+[Identify risks for each candidate and mitigation strategies]
+
+## Recommended Ranking
+1. [Name] - [One-line rationale]
+2. [Name] - [One-line rationale]
+...
+
+## Decision Recommendation
+[Final recommendation with confidence level and suggested next steps]
+
+---
+*Generated by AI Interview Assistant*
+"""
+
+    from interviewbot.services.ai_engine import AIEngine
+
+    engine = AIEngine()
+    debrief = await engine.chat(
+        [{"role": "user", "content": prompt}],
+        temperature=0.3,
+        max_tokens=4096,
+    )
+
+    return {
+        "debrief": debrief,
+        "candidates": [{"name": c["name"], "score": c["score"]} for c in candidates_data],
+    }
 
 
 async def _fetch_session_and_report(
@@ -175,6 +332,47 @@ async def get_report(
 ) -> CandidateReportResponse:
     session, report = await _fetch_session_and_report(session_id, db, org_id)
     return _to_response(report, session.candidate_name, session.overall_score)
+
+
+@router.get("/{session_id}/highlights")
+async def get_highlights(
+    session_id: UUID,
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
+    db: AsyncSession = Depends(get_db),
+    org_id: UUID = Depends(get_org_id),
+):
+    """Get AI-generated highlights for an interview."""
+    session_result = await db.execute(
+        select(InterviewSession).where(
+            InterviewSession.id == session_id,
+            InterviewSession.org_id == org_id,
+        )
+    )
+    session = session_result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interview not found")
+
+    report_result = await db.execute(
+        select(CandidateReport).where(CandidateReport.session_id == session_id)
+    )
+    report = report_result.scalar_one_or_none()
+    highlights: list[dict] = []
+    if report:
+        highlights = (report.extended_data or {}).get("highlights", [])
+
+    # If no highlights exist yet, generate them on-demand
+    if not highlights:
+        from interviewbot.services.highlight_engine import generate_highlights
+
+        highlights = await generate_highlights(str(session_id), db) or []
+        if highlights and report:
+            report.extended_data = {
+                **(report.extended_data or {}),
+                "highlights": highlights,
+            }
+            await db.commit()
+
+    return {"highlights": highlights, "session_id": str(session_id)}
 
 
 @router.get("/{session_id}/export/json")

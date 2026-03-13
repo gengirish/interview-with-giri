@@ -1,4 +1,7 @@
+from collections import defaultdict
+import contextlib
 from datetime import UTC, datetime, timedelta
+import json
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -229,3 +232,123 @@ async def compare_candidates(
         }
         for r in rows
     ]
+
+
+@router.get("/skills-insights")
+async def get_skills_insights(
+    job_id: str | None = Query(None),
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
+    db: AsyncSession = Depends(get_db),
+    org_id: UUID = Depends(get_org_id),
+):
+    """Get skills gap analysis and market insights."""
+    query = (
+        select(CandidateReport, InterviewSession)
+        .join(InterviewSession, InterviewSession.id == CandidateReport.session_id)
+        .where(
+            InterviewSession.org_id == org_id,
+            InterviewSession.status == "completed",
+        )
+    )
+    if job_id:
+        query = query.where(InterviewSession.job_posting_id == UUID(job_id))
+
+    result = await db.execute(query)
+    rows = result.all()
+
+    if not rows:
+        return {
+            "total_candidates": 0,
+            "skill_averages": {},
+            "skill_gaps": [],
+            "skill_strengths": [],
+            "recommendations": [],
+            "behavioral_averages": {},
+        }
+
+    skill_scores: dict[str, list[float]] = defaultdict(list)
+    behavioral_scores: dict[str, list[float]] = defaultdict(list)
+
+    for report, _session in rows:
+        if report.skill_scores:
+            for skill, data in report.skill_scores.items():
+                score = data.get("score") if isinstance(data, dict) else data
+                if score is not None:
+                    with contextlib.suppress(ValueError, TypeError):
+                        skill_scores[skill].append(float(score))
+        if report.behavioral_scores:
+            for dim, data in report.behavioral_scores.items():
+                score = data.get("score") if isinstance(data, dict) else data
+                if score is not None:
+                    with contextlib.suppress(ValueError, TypeError):
+                        behavioral_scores[dim].append(float(score))
+
+    skill_averages = {
+        skill: {
+            "avg": round(sum(scores) / len(scores), 2),
+            "min": round(min(scores), 2),
+            "max": round(max(scores), 2),
+            "count": len(scores),
+            "std_dev": round(
+                (sum((s - sum(scores) / len(scores)) ** 2 for s in scores) / len(scores)) ** 0.5,
+                2,
+            ),
+        }
+        for skill, scores in skill_scores.items()
+        if scores
+    }
+
+    behavioral_averages = {
+        dim: {
+            "avg": round(sum(scores) / len(scores), 2),
+            "count": len(scores),
+        }
+        for dim, scores in behavioral_scores.items()
+        if scores
+    }
+
+    skill_gaps = sorted(
+        [{"skill": k, **v} for k, v in skill_averages.items() if v["avg"] < 5.0],
+        key=lambda x: x["avg"],
+    )
+    skill_strengths = sorted(
+        [{"skill": k, **v} for k, v in skill_averages.items() if v["avg"] >= 7.0],
+        key=lambda x: -x["avg"],
+    )
+
+    recommendations = []
+    if skill_gaps:
+        gap_text = ", ".join(f"{g['skill']} (avg: {g['avg']})" for g in skill_gaps[:5])
+        strength_text = ", ".join(f"{s['skill']} (avg: {s['avg']})" for s in skill_strengths[:5])
+
+        prompt = f"""Based on interview data analysis:
+- Skills gaps (low scores): {gap_text}
+- Skills strengths (high scores): {strength_text}
+- Total candidates evaluated: {len(rows)}
+
+Provide 3-5 concise, actionable recommendations for the hiring team. Each should be 1-2 sentences.
+Focus on: adjusting job descriptions, improving sourcing, modifying interview focus areas.
+
+Return JSON: {{"recommendations": ["rec1", "rec2", ...]}}"""
+
+        try:
+            from interviewbot.services.ai_engine import AIEngine
+
+            engine = AIEngine()
+            raw = await engine.chat([{"role": "user", "content": prompt}], temperature=0.3)
+            cleaned = raw.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
+            data = json.loads(cleaned)
+            recommendations = data.get("recommendations", [])
+        except Exception:
+            recommendations = []
+
+    return {
+        "total_candidates": len(rows),
+        "skill_averages": skill_averages,
+        "behavioral_averages": behavioral_averages,
+        "skill_gaps": skill_gaps,
+        "skill_strengths": skill_strengths,
+        "recommendations": recommendations,
+    }

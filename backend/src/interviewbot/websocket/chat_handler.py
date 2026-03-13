@@ -63,7 +63,9 @@ class FollowUpTracker:
         return hints.get(level, "")
 
 
-def _build_system_prompt(job: JobPosting, config: dict, resume_text: str | None = None) -> str:
+def _build_system_prompt(
+    job: JobPosting, config: dict, resume_text: str | None = None, is_practice: bool = False
+) -> str:
     skills = ", ".join(job.required_skills or [])
     role_type = job.role_type or "mixed"
 
@@ -138,6 +140,26 @@ def _build_system_prompt(job: JobPosting, config: dict, resume_text: str | None 
             f"your questions - reference their specific experience, projects, and skills:\n"
             f"{resume_text[:3000]}"
         )
+    prompt += (
+        "\n\n## Adaptive Difficulty\n"
+        "Track the candidate's performance across answers. After each response:\n"
+        "- If the candidate gives a strong, detailed answer: INCREASE difficulty\n"
+        "- If the candidate struggles or gives a weak answer: DECREASE difficulty\n"
+        "- Tag each question internally as [EASY], [MEDIUM], [HARD], or [EXPERT]\n"
+        "- Start at the configured difficulty level and adapt from there\n"
+        "- Include a hidden tag at the START of each response in the format: "
+        "<!--DIFFICULTY:medium--> (this will be parsed by the system)\n"
+    )
+    if is_practice:
+        prompt += (
+            "\n\n## PRACTICE MODE - Coaching Enabled\n"
+            "This is a PRACTICE interview. After the candidate answers each question:\n"
+            "1. Briefly acknowledge their answer\n"
+            "2. Provide a SHORT coaching tip (1-2 sentences) on how they could improve\n"
+            "3. Format tips as: **Tip:** [your coaching advice]\n"
+            "4. Then ask the next question\n"
+            "Be encouraging and constructive. Help them learn.\n"
+        )
     return prompt
 
 
@@ -157,6 +179,24 @@ async def _handle_end_interview(
     websocket: WebSocket,
     questions: int,
 ) -> None:
+    # Skip report generation for practice sessions
+    if session.is_practice:
+        session.status = "completed"
+        session.completed_at = datetime.now(UTC)
+        if session.started_at:
+            session.duration_seconds = int(
+                (session.completed_at - session.started_at).total_seconds()
+            )
+        await db.commit()
+        await _send_json(
+            websocket,
+            {
+                "type": "practice_complete",
+                "content": "Practice session complete! Review your answers above to improve.",
+            },
+        )
+        return
+
     session.status = "completed"
     session.completed_at = datetime.now(UTC)
     if session.started_at:
@@ -264,6 +304,21 @@ async def _process_candidate_message(
 
     response = await engine.chat(conversation.get_messages())
 
+    # Parse difficulty tag and track progression
+    difficulty_match = re.search(r"<!--DIFFICULTY:(\w+)-->", response)
+    current_difficulty = difficulty_match.group(1) if difficulty_match else "medium"
+    response = re.sub(r"<!--DIFFICULTY:\w+-->\s*", "", response)
+
+    progression = session.difficulty_progression or []
+    progression.append(
+        {
+            "question": len(progression) + 1,
+            "difficulty": current_difficulty,
+        }
+    )
+    session.difficulty_progression = progression
+    await db.commit()
+
     for _ in range(injections_added):
         conversation.messages.pop(-1)
 
@@ -338,7 +393,9 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
             resume_text = _extract_pdf_text(file_path)
 
     engine = AIEngine()
-    system_prompt = _build_system_prompt(job, config, resume_text=resume_text)
+    system_prompt = _build_system_prompt(
+        job, config, resume_text=resume_text, is_practice=bool(session.is_practice)
+    )
     conversation = InterviewConversation(system_prompt)
     tracker = FollowUpTracker(max_depth=3) if is_technical else None
 
@@ -348,6 +405,16 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
 
     try:
         first_question = await engine.chat(conversation.get_messages())
+        # Parse and strip difficulty tag from first question
+        difficulty_match = re.search(r"<!--DIFFICULTY:(\w+)-->", first_question)
+        current_difficulty = difficulty_match.group(1) if difficulty_match else "medium"
+        first_question = re.sub(r"<!--DIFFICULTY:\w+-->\s*", "", first_question)
+
+        progression = session.difficulty_progression or []
+        progression.append({"question": 1, "difficulty": current_difficulty})
+        session.difficulty_progression = progression
+        await db.commit()
+
         conversation.add_message("assistant", first_question)
         await _save_message(db, session.id, "interviewer", first_question)
 

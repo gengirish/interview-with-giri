@@ -224,6 +224,7 @@ async def get_public_interview(
             company_name=branding.get("company_name", org.name if org else ""),
             tagline=branding.get("tagline", ""),
         ),
+        is_practice=bool(session.is_practice),
     )
 
 
@@ -270,4 +271,5 @@ def _session_to_response(session: InterviewSession) -> InterviewSessionResponse:
         started_at=session.started_at,
         completed_at=session.completed_at,
         created_at=session.created_at,
+        difficulty_progression=session.difficulty_progression,
     )
