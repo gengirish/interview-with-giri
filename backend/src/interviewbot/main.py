@@ -16,6 +16,7 @@ from interviewbot.routers import (
     auth,
     billing,
     code_execution,
+    comments,
     dashboard,
     health,
     interviews,
@@ -23,6 +24,8 @@ from interviewbot.routers import (
     organizations,
     proctoring,
     reports,
+    templates,
+    uploads,
     users,
     webhooks,
 )
@@ -105,11 +108,14 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(auth.router, prefix="/api/v1")
+    app.include_router(uploads.router, prefix="/api/v1")
     app.include_router(job_postings.router, prefix="/api/v1")
+    app.include_router(templates.router, prefix="/api/v1")
     app.include_router(interviews.router, prefix="/api/v1")
     app.include_router(dashboard.router, prefix="/api/v1")
     app.include_router(code_execution.router, prefix="/api/v1")
     app.include_router(reports.router, prefix="/api/v1")
+    app.include_router(comments.router, prefix="/api/v1")
     app.include_router(analytics.router, prefix="/api/v1")
     app.include_router(proctoring.router, prefix="/api/v1")
     app.include_router(billing.router, prefix="/api/v1")

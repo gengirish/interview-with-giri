@@ -50,3 +50,6 @@ alembic/versions/*.pyc
 
 # API keys
 agentmail_api_key*.txt
+
+# Uploads
+uploads/

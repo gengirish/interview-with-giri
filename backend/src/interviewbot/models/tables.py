@@ -88,6 +88,7 @@ class JobPosting(Base):
         },
     )
     interview_format = Column(String(20), default="text")
+    scoring_rubric = Column(JSONB, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
@@ -109,6 +110,9 @@ class InterviewSession(Base):
     token = Column(String(64), unique=True, nullable=False)
     candidate_name = Column(String(255))
     candidate_email = Column(String(255))
+    resume_url = Column(Text, nullable=True)
+    is_shortlisted = Column(Boolean, default=False)
+    scheduled_at = Column(DateTime(timezone=True), nullable=True)
     status = Column(String(30), default="pending", index=True)
     format = Column(String(20), default="text")
     overall_score = Column(Numeric(4, 2))
@@ -174,5 +178,37 @@ class CandidateReport(Base):
     confidence_score = Column(Numeric(3, 2))
     extended_data = Column(JSONB, default=dict)
     created_at = Column(DateTime(timezone=True), default=utcnow)
+    share_token = Column(String(64), unique=True, nullable=True, index=True)
+    share_expires_at = Column(DateTime(timezone=True), nullable=True)
 
     session = relationship("InterviewSession", back_populates="report")
+
+
+class InterviewTemplate(Base):
+    __tablename__ = "interview_template"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organization.id"), nullable=True, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    role_type = Column(String(50), nullable=False)
+    job_description_template = Column(Text, nullable=True)
+    required_skills = Column(JSONB, default=list)
+    interview_config = Column(JSONB, default=dict)
+    interview_format = Column(String(20), default="text")
+    is_system = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+
+
+class ReportComment(Base):
+    __tablename__ = "report_comment"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    report_id = Column(
+        UUID(as_uuid=True), ForeignKey("candidate_report.id"), nullable=False, index=True
+    )
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    mentioned_user_ids = Column(JSONB, default=list)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

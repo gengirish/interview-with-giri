@@ -111,6 +111,12 @@ export interface TokenResponse {
   org_id: string;
 }
 
+export interface ScoringRubricDimension {
+  dimension: string;
+  weight: number;
+  description: string;
+}
+
 export interface JobPosting {
   id: string;
   org_id: string;
@@ -120,6 +126,7 @@ export interface JobPosting {
   required_skills: string[];
   interview_format: string;
   interview_config: Record<string, unknown>;
+  scoring_rubric?: ScoringRubricDimension[] | null;
   is_active: boolean;
   created_at: string;
   interview_link?: string;
@@ -305,11 +312,23 @@ export const api = {
     }),
   deleteJobPosting: (id: string) =>
     request<void>(`/api/v1/job-postings/${id}`, { method: "DELETE" }),
-  generateInterviewLink: (id: string) =>
-    request<{ token: string; interview_url: string }>(
-      `/api/v1/job-postings/${id}/generate-link`,
-      { method: "POST" },
-    ),
+  generateInterviewLink: (
+    id: string,
+    data?: {
+      candidate_name?: string;
+      candidate_email?: string;
+      scheduled_at?: string;
+    },
+  ) =>
+    request<{
+      token: string;
+      interview_url: string;
+      ics_content?: string;
+      scheduled_at?: string;
+    }>(`/api/v1/job-postings/${id}/generate-link`, {
+      method: "POST",
+      ...(data ? { body: JSON.stringify(data) } : {}),
+    }),
 
   importJobPostings: async (file: File) => {
     const token =
@@ -359,6 +378,33 @@ export const api = {
       suggested_questions: string[];
     }>(`/api/v1/job-postings/${id}/extract-skills`, { method: "POST" }),
 
+  // Templates
+  getTemplates: () =>
+    request<
+      Array<{
+        id: string;
+        name: string;
+        description: string | null;
+        role_type: string;
+        job_description_template: string | null;
+        required_skills: string[];
+        interview_config: Record<string, unknown>;
+        interview_format: string;
+        is_system: boolean;
+      }>
+    >("/api/v1/templates"),
+  createTemplate: (data: Record<string, unknown>) =>
+    request<Record<string, unknown>>("/api/v1/templates", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  createTemplateFromJob: (jobId: string) =>
+    request<Record<string, unknown>>(`/api/v1/templates/from-job/${jobId}`, {
+      method: "POST",
+    }),
+  deleteTemplate: (id: string) =>
+    request<void>(`/api/v1/templates/${id}`, { method: "DELETE" }),
+
   // Interviews
   getInterviews: (page = 1, jobId?: string, statusFilter?: string, candidateName?: string, dateFrom?: string, dateTo?: string) => {
     const params = new URLSearchParams({ page: String(page) });
@@ -387,12 +433,52 @@ export const api = {
     }),
   getReport: (sessionId: string) =>
     request<CandidateReport>(`/api/v1/reports/${sessionId}`),
+  shareReport: (sessionId: string, hours?: number) =>
+    request<{ share_url: string; share_token: string; expires_at: string }>(
+      `/api/v1/reports/${sessionId}/share?hours=${hours ?? 72}`,
+      { method: "POST" },
+    ),
+  getPublicReport: (shareToken: string) =>
+    request<CandidateReport>(`/api/v1/reports/public/${shareToken}`),
   exportReportJSON: (sessionId: string) =>
     request<Record<string, unknown>>(
       `/api/v1/reports/${sessionId}/export/json`,
     ),
   exportReportCSV: (sessionId: string) =>
     `/api/v1/reports/${sessionId}/export/csv`,
+  // Comments
+  getComments: (sessionId: string) =>
+    request<
+      Array<{
+        id: string;
+        report_id: string;
+        user_id: string;
+        user_name: string;
+        user_email: string;
+        content: string;
+        mentioned_user_ids: string[];
+        created_at: string;
+      }>
+    >(`/api/v1/reports/${sessionId}/comments`),
+  addComment: (sessionId: string, content: string) =>
+    request<{
+      id: string;
+      report_id: string;
+      user_id: string;
+      user_name: string;
+      user_email: string;
+      content: string;
+      mentioned_user_ids: string[];
+      created_at: string;
+    }>(`/api/v1/reports/${sessionId}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    }),
+  deleteComment: (sessionId: string, commentId: string) =>
+    request<void>(`/api/v1/reports/${sessionId}/comments/${commentId}`, {
+      method: "DELETE",
+    }),
+
   exportReportCSVBlob: async (sessionId: string): Promise<Blob> => {
     const token =
       typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -433,6 +519,60 @@ export const api = {
     request<AnalyticsOverview>("/api/v1/analytics/overview"),
   getAnalyticsPerJob: () =>
     request<JobAnalytics[]>("/api/v1/analytics/per-job"),
+
+  // Comparison
+  compareCandidates: (jobId: string) =>
+    request<
+      Array<{
+        session_id: string;
+        candidate_name: string | null;
+        candidate_email: string | null;
+        overall_score: number | null;
+        duration_seconds: number | null;
+        completed_at: string | null;
+        is_shortlisted: boolean;
+        skill_scores: Record<string, { score: number | null; evidence: string }>;
+        behavioral_scores: Record<string, { score: number | null; evidence: string }>;
+        recommendation: string | null;
+        confidence_score: number | null;
+        strengths: string[];
+        concerns: string[];
+        ai_summary: string | null;
+      }>
+    >(`/api/v1/analytics/compare?job_id=${jobId}`),
+  toggleShortlist: (sessionId: string) =>
+    request<{ session_id: string; is_shortlisted: boolean }>(
+      `/api/v1/interviews/${sessionId}/shortlist`,
+      { method: "PATCH" },
+    ),
+
+  // Resume Upload (candidate-facing, optional auth)
+  uploadResume: async (token: string, file: File) => {
+    const authToken =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${API_BASE}/api/v1/uploads/resume/${token}`, {
+      method: "POST",
+      body: formData,
+      headers: {
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError(
+        res.status,
+        (body as { detail?: string }).detail || "Upload failed",
+      );
+    }
+    return res.json() as Promise<{
+      filename: string;
+      resume_url: string;
+      text_preview: string;
+      text_length: number;
+    }>;
+  },
 
   // Public Interview
   getPublicInterview: (token: string) =>
@@ -475,6 +615,28 @@ export const api = {
       },
     ),
 
+  // Organization / Branding
+  getBranding: () =>
+    request<{
+      logo_url: string;
+      primary_color: string;
+      company_name: string;
+      tagline: string;
+    }>("/api/v1/organizations/branding"),
+  updateBranding: (data: {
+    logo_url: string;
+    primary_color: string;
+    company_name: string;
+    tagline: string;
+  }) =>
+    request<{ status: string; branding: typeof data }>(
+      "/api/v1/organizations/branding",
+      {
+        method: "PUT",
+        body: JSON.stringify(data),
+      },
+    ),
+
   // Organization / Email
   setupOrgEmail: () =>
     request<{ inbox_id: string; email: string; already_configured: boolean }>(
@@ -488,6 +650,10 @@ export const api = {
 
   // User Management
   getUsers: () => request<OrgUser[]>("/api/v1/users"),
+  getOrgMembersForMentions: () =>
+    request<
+      Array<{ id: string; email: string; full_name: string }>
+    >("/api/v1/users/org-members"),
   getCurrentUser: () => request<OrgUser>("/api/v1/users/me"),
   inviteUser: (data: {
     email: string;

@@ -11,6 +11,7 @@ import {
   Plug,
   Mail,
   CheckCircle2,
+  Palette,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -52,6 +53,19 @@ export default function SettingsPage() {
     report_generated: true,
     weekly_digest: true,
   });
+  const [branding, setBranding] = useState<{
+    logo_url: string;
+    primary_color: string;
+    company_name: string;
+    tagline: string;
+  }>({
+    logo_url: "",
+    primary_color: "#4F46E5",
+    company_name: "",
+    tagline: "",
+  });
+  const [brandingLoading, setBrandingLoading] = useState(false);
+  const [brandingSaving, setBrandingSaving] = useState(false);
 
   useEffect(() => {
     try {
@@ -120,6 +134,19 @@ export default function SettingsPage() {
         .then(setEmailStatus)
         .catch(() => setEmailStatus(null))
         .finally(() => setEmailLoading(false));
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "branding") {
+      setBrandingLoading(true);
+      api
+        .getBranding()
+        .then(setBranding)
+        .catch((err: unknown) => {
+          toast.error(err instanceof Error ? err.message : "Failed to load branding");
+        })
+        .finally(() => setBrandingLoading(false));
     }
   }, [activeTab]);
 
@@ -213,8 +240,22 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleSaveBranding(e: React.FormEvent) {
+    e.preventDefault();
+    setBrandingSaving(true);
+    try {
+      await api.updateBranding(branding);
+      toast.success("Branding saved successfully");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save branding");
+    } finally {
+      setBrandingSaving(false);
+    }
+  }
+
   const tabs = [
     { id: "billing", label: "Billing", icon: CreditCard },
+    { id: "branding", label: "Branding", icon: Palette },
     { id: "email", label: "Email", icon: Mail },
     { id: "webhooks", label: "Webhooks", icon: Link2 },
     { id: "notifications", label: "Notifications", icon: Bell },
@@ -412,6 +453,204 @@ export default function SettingsPage() {
               </div>
               ))
             )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "branding" && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-900">
+              Custom Branding
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Customize how your interview pages appear to candidates. These
+              settings apply to the candidate-facing interview experience.
+            </p>
+
+            {brandingLoading ? (
+              <div className="mt-6 flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+              </div>
+            ) : (
+              <form onSubmit={handleSaveBranding} className="mt-6 space-y-4">
+                <div>
+                  <label
+                    htmlFor="branding-company"
+                    className="block text-sm font-medium text-slate-700 mb-1"
+                  >
+                    Company Name
+                  </label>
+                  <input
+                    id="branding-company"
+                    type="text"
+                    value={branding.company_name}
+                    onChange={(e) =>
+                      setBranding((b) => ({ ...b, company_name: e.target.value }))
+                    }
+                    placeholder="Acme Corp"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="branding-tagline"
+                    className="block text-sm font-medium text-slate-700 mb-1"
+                  >
+                    Tagline
+                  </label>
+                  <input
+                    id="branding-tagline"
+                    type="text"
+                    value={branding.tagline}
+                    onChange={(e) =>
+                      setBranding((b) => ({ ...b, tagline: e.target.value }))
+                    }
+                    placeholder="Powered by Acme"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="branding-color"
+                    className="block text-sm font-medium text-slate-700 mb-1"
+                  >
+                    Primary Color
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      id="branding-color"
+                      type="color"
+                      value={branding.primary_color}
+                      onChange={(e) =>
+                        setBranding((b) => ({
+                          ...b,
+                          primary_color: e.target.value,
+                        }))
+                      }
+                      className="h-10 w-14 cursor-pointer rounded border border-slate-300 bg-transparent p-1"
+                    />
+                    <input
+                      type="text"
+                      value={branding.primary_color}
+                      onChange={(e) =>
+                        setBranding((b) => ({
+                          ...b,
+                          primary_color: e.target.value,
+                        }))
+                      }
+                      placeholder="#4F46E5"
+                      className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label
+                    htmlFor="branding-logo"
+                    className="block text-sm font-medium text-slate-700 mb-1"
+                  >
+                    Logo URL
+                  </label>
+                  <input
+                    id="branding-logo"
+                    type="url"
+                    value={branding.logo_url}
+                    onChange={(e) =>
+                      setBranding((b) => ({ ...b, logo_url: e.target.value }))
+                    }
+                    placeholder="https://example.com/logo.png"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                  />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Enter a URL to your logo image. Recommended: square or
+                    wide logo, transparent background.
+                  </p>
+                </div>
+                <button
+                  type="submit"
+                  disabled={brandingSaving}
+                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                >
+                  {brandingSaving ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Branding"
+                  )}
+                </button>
+              </form>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-900">
+              Live Preview
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              How your interview page will look to candidates.
+            </p>
+            <div
+              className="mt-6 rounded-xl border border-slate-200 bg-slate-950 p-6"
+              style={
+                {
+                  "--brand-color": branding.primary_color || "#4F46E5",
+                } as React.CSSProperties
+              }
+            >
+              <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  {branding.logo_url ? (
+                    <img
+                      src={branding.logo_url}
+                      alt="Logo"
+                      className="h-10 w-10 rounded-xl object-contain"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                  ) : (
+                    <div
+                      className="h-10 w-10 rounded-xl flex items-center justify-center"
+                      style={{
+                        backgroundColor:
+                          branding.primary_color || "#4F46E5",
+                      }}
+                    >
+                      <Palette className="h-5 w-5 text-white" />
+                    </div>
+                  )}
+                  <div>
+                    <h4 className="text-lg font-bold text-white">
+                      {branding.company_name || "Your Company"}
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      {branding.tagline || "AI-Powered Interview"}
+                    </p>
+                  </div>
+                </div>
+                <div className="rounded-lg bg-slate-800/50 p-3 mb-4">
+                  <p className="text-sm font-medium text-slate-300">
+                    Senior Software Engineer
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Sample job description preview...
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled
+                  className="w-full rounded-lg py-2.5 text-sm font-medium text-white transition-colors"
+                  style={{
+                    backgroundColor:
+                      branding.primary_color || "#4F46E5",
+                  }}
+                >
+                  I Agree — Continue
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

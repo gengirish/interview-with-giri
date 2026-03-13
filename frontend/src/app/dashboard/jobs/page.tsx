@@ -2,12 +2,12 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { GenerateLinkModal } from "@/components/generate-link-modal";
 import { ImportJobsModal } from "@/components/import-jobs-modal";
 import { api, type JobPosting } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import {
   Plus,
-  Copy,
   Trash2,
   ExternalLink,
   Sparkles,
@@ -15,10 +15,34 @@ import {
   Briefcase,
   Upload,
   Pencil,
+  FileText,
+  X,
+  Gauge,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import Link from "next/link";
+
+const LANGUAGES = [
+  { code: "en", label: "English" },
+  { code: "es", label: "Spanish (Español)" },
+  { code: "fr", label: "French (Français)" },
+  { code: "de", label: "German (Deutsch)" },
+  { code: "pt", label: "Portuguese (Português)" },
+  { code: "hi", label: "Hindi (हिन्दी)" },
+  { code: "zh", label: "Chinese (中文)" },
+  { code: "ja", label: "Japanese (日本語)" },
+  { code: "ko", label: "Korean (한국어)" },
+  { code: "ar", label: "Arabic (العربية)" },
+  { code: "it", label: "Italian (Italiano)" },
+  { code: "nl", label: "Dutch (Nederlands)" },
+  { code: "ru", label: "Russian (Русский)" },
+  { code: "ta", label: "Tamil (தமிழ்)" },
+  { code: "te", label: "Telugu (తెలుగు)" },
+  { code: "kn", label: "Kannada (ಕನ್ನಡ)" },
+];
+
+type ScoringDimension = { dimension: string; weight: number; description: string };
 
 type FormData = {
   title: string;
@@ -31,7 +55,9 @@ type FormData = {
     duration_minutes: number;
     difficulty: string;
     include_coding: boolean;
+    language: string;
   };
+  scoring_rubric: ScoringDimension[];
 };
 
 const defaultForm: FormData = {
@@ -45,8 +71,18 @@ const defaultForm: FormData = {
     duration_minutes: 30,
     difficulty: "medium",
     include_coding: false,
+    language: "en",
   },
+  scoring_rubric: [],
 };
+
+const COMMON_DIMENSIONS: ScoringDimension[] = [
+  { dimension: "Code Quality", weight: 0.25, description: "Clean code, naming, modularity" },
+  { dimension: "Problem Solving", weight: 0.25, description: "Algorithmic thinking, edge cases" },
+  { dimension: "Communication", weight: 0.2, description: "Clarity, structure, explanation" },
+  { dimension: "System Design", weight: 0.2, description: "Architecture, scalability, trade-offs" },
+  { dimension: "Cultural Fit", weight: 0.1, description: "Values alignment, teamwork" },
+];
 
 export default function JobsPage() {
   const { hasRole } = useAuth();
@@ -58,9 +94,24 @@ export default function JobsPage() {
   const [form, setForm] = useState<FormData>({ ...defaultForm });
   const [saving, setSaving] = useState(false);
   const [extracting, setExtracting] = useState<string | null>(null);
-  const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const [generateLinkJob, setGenerateLinkJob] = useState<JobPosting | null>(null);
   const [deleteJobId, setDeleteJobId] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [templates, setTemplates] = useState<
+    Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      role_type: string;
+      job_description_template: string | null;
+      required_skills: string[];
+      interview_config: Record<string, unknown>;
+      interview_format: string;
+      is_system: boolean;
+    }>
+  >([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleTypeFilter, setRoleTypeFilter] = useState<string>("");
   const [interviewFormatFilter, setInterviewFormatFilter] = useState<string>("");
@@ -91,6 +142,48 @@ export default function JobsPage() {
     loadJobs();
   }, [loadJobs]);
 
+  async function loadTemplates() {
+    setTemplatesLoading(true);
+    try {
+      const list = await api.getTemplates();
+      setTemplates(list);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load templates");
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }
+
+  function handleUseTemplate(
+    t: (typeof templates)[0],
+  ) {
+    const config = t.interview_config as {
+      num_questions?: number;
+      duration_minutes?: number;
+      difficulty?: string;
+      include_coding?: boolean;
+      language?: string;
+    };
+    setForm({
+      ...form,
+      title: "",
+      role_type: t.role_type,
+      job_description: t.job_description_template ?? "",
+      required_skills: Array.isArray(t.required_skills)
+        ? t.required_skills.join(", ")
+        : "",
+      interview_format: t.interview_format,
+      interview_config: {
+        num_questions: config?.num_questions ?? 10,
+        duration_minutes: config?.duration_minutes ?? 30,
+        difficulty: config?.difficulty ?? "medium",
+        include_coding: config?.include_coding ?? false,
+        language: config?.language ?? "en",
+      },
+    });
+    setShowTemplates(false);
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -105,6 +198,7 @@ export default function JobsPage() {
           .filter(Boolean),
         interview_format: form.interview_format,
         interview_config: form.interview_config,
+        scoring_rubric: form.scoring_rubric,
       });
       setForm({ ...defaultForm });
       setShowForm(false);
@@ -134,18 +228,8 @@ export default function JobsPage() {
     return "Text Interview Link";
   }
 
-  async function handleGenerateLink(jobId: string) {
-    try {
-      const res = await api.generateInterviewLink(jobId);
-      const job = jobs.find((j) => j.id === jobId);
-      const path = getInterviewPath(job, res.token);
-      const fullUrl = `${window.location.origin}${path}`;
-      await navigator.clipboard.writeText(fullUrl);
-      setCopiedToken(jobId);
-      setTimeout(() => setCopiedToken(null), 2000);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to generate link");
-    }
+  function handleOpenGenerateLink(job: JobPosting) {
+    setGenerateLinkJob(job);
   }
 
   async function handleExtractSkills(jobId: string) {
@@ -263,6 +347,72 @@ export default function JobsPage() {
           onSubmit={handleCreate}
           className="rounded-xl border border-slate-200 bg-white p-6 space-y-4"
         >
+          <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+            <h3 className="text-lg font-medium text-slate-900">Create Job Posting</h3>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowTemplates(true);
+                  if (templates.length === 0) loadTemplates();
+                }}
+                className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
+              >
+                <FileText className="h-4 w-4" />
+                Use Template
+              </button>
+            )}
+          </div>
+
+          {showTemplates && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-slate-700">Choose a template</h4>
+                <button
+                  type="button"
+                  onClick={() => setShowTemplates(false)}
+                  className="rounded p-1 text-slate-500 hover:bg-slate-200 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {templatesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+                </div>
+              ) : (
+                <div className="grid gap-2 max-h-48 overflow-y-auto">
+                  {templates.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => handleUseTemplate(t)}
+                      className="flex flex-col items-start rounded-lg border border-slate-200 bg-white px-4 py-3 text-left hover:border-indigo-300 hover:bg-indigo-50/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-slate-900">{t.name}</span>
+                        {t.is_system && (
+                          <span className="rounded bg-slate-200 px-1.5 py-0.5 text-xs text-slate-600">
+                            System
+                          </span>
+                        )}
+                      </div>
+                      {t.description && (
+                        <p className="mt-0.5 text-sm text-slate-500 line-clamp-2">
+                          {t.description}
+                        </p>
+                      )}
+                      <span className="mt-1 text-xs text-indigo-600 font-medium">
+                        Use this template →
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="job-title" className="block text-sm font-medium text-slate-700 mb-1">
@@ -314,7 +464,7 @@ export default function JobsPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div>
               <label htmlFor="required-skills" className="block text-sm font-medium text-slate-700 mb-1">
                 Required Skills (comma-separated)
@@ -345,6 +495,31 @@ export default function JobsPage() {
                 <option value="text">Text Chat</option>
                 <option value="voice">Voice</option>
                 <option value="video">Video</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="language" className="block text-sm font-medium text-slate-700 mb-1">
+                Language
+              </label>
+              <select
+                id="language"
+                value={form.interview_config.language}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    interview_config: {
+                      ...form.interview_config,
+                      language: e.target.value,
+                    },
+                  })
+                }
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+              >
+                {LANGUAGES.map((lang) => (
+                  <option key={lang.code} value={lang.code}>
+                    {lang.label}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -417,6 +592,123 @@ export default function JobsPage() {
                 <option value="hard">Hard</option>
               </select>
             </div>
+          </div>
+
+          <div className="border-t border-slate-200 pt-4">
+            <h3 className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-2">
+              <Gauge className="h-4 w-4" />
+              Custom Scoring Rubric (Optional)
+            </h3>
+            <p className="text-xs text-slate-500 mb-3">
+              Leave empty to use default AI scoring rubric
+            </p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {COMMON_DIMENSIONS.map((dim, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() =>
+                    setForm({
+                      ...form,
+                      scoring_rubric: [...form.scoring_rubric, { ...dim }],
+                    })
+                  }
+                  className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  + {dim.dimension}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setForm({
+                  ...form,
+                  scoring_rubric: [
+                    ...form.scoring_rubric,
+                    { dimension: "", weight: 0.2, description: "" },
+                  ],
+                })
+              }
+              className="rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors mb-3"
+            >
+              + Add Dimension
+            </button>
+            {form.scoring_rubric.length > 0 && (
+              <div className="space-y-2">
+                {form.scoring_rubric.map((dim, idx) => (
+                  <div
+                    key={idx}
+                    className="flex flex-wrap items-start gap-2 rounded-lg border border-slate-200 bg-slate-50/50 p-3"
+                  >
+                    <input
+                      type="text"
+                      placeholder="Dimension name"
+                      value={dim.dimension}
+                      onChange={(e) => {
+                        const next = [...form.scoring_rubric];
+                        next[idx] = { ...next[idx], dimension: e.target.value };
+                        setForm({ ...form, scoring_rubric: next });
+                      }}
+                      className="flex-1 min-w-[120px] rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+                    />
+                    <div className="flex items-center gap-1">
+                      <label className="text-xs text-slate-500">Weight</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={dim.weight}
+                        onChange={(e) => {
+                          const next = [...form.scoring_rubric];
+                          next[idx] = {
+                            ...next[idx],
+                            weight: Math.max(0, Math.min(1, Number(e.target.value))),
+                          };
+                          setForm({ ...form, scoring_rubric: next });
+                        }}
+                        className="w-16 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Description"
+                      value={dim.description}
+                      onChange={(e) => {
+                        const next = [...form.scoring_rubric];
+                        next[idx] = { ...next[idx], description: e.target.value };
+                        setForm({ ...form, scoring_rubric: next });
+                      }}
+                      className="flex-1 min-w-[160px] rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          scoring_rubric: form.scoring_rubric.filter(
+                            (_, i) => i !== idx
+                          ),
+                        })
+                      }
+                      className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                      aria-label="Remove dimension"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+                <p className="text-xs text-slate-500">
+                  Total weight:{" "}
+                  {form.scoring_rubric
+                    .reduce((s, d) => s + d.weight, 0)
+                    .toFixed(2)}
+                  {form.scoring_rubric.reduce((s, d) => s + d.weight, 0) !== 1 &&
+                    " (consider normalizing to 1.0)"}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-4 pt-2">
@@ -523,20 +815,11 @@ export default function JobsPage() {
                   )}
                   {canEdit && (
                     <button
-                      onClick={() => handleGenerateLink(job.id)}
+                      onClick={() => handleOpenGenerateLink(job)}
                       className="flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
                     >
-                      {copiedToken === job.id ? (
-                        <>
-                          <Copy className="h-3.5 w-3.5" />
-                          Copied!
-                        </>
-                      ) : (
-                        <>
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          {getLinkLabel(job)}
-                        </>
-                      )}
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      {getLinkLabel(job)}
                     </button>
                   )}
                   {canDelete && (
@@ -591,6 +874,13 @@ export default function JobsPage() {
         open={showImport}
         onClose={() => setShowImport(false)}
         onImported={loadJobs}
+      />
+
+      <GenerateLinkModal
+        open={generateLinkJob !== null}
+        onClose={() => setGenerateLinkJob(null)}
+        job={generateLinkJob!}
+        getInterviewPath={getInterviewPath}
       />
     </div>
   );

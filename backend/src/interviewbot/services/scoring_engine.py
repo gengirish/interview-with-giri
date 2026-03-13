@@ -53,9 +53,13 @@ async def score_interview(session_id: str, db: AsyncSession) -> CandidateReport 
 
     transcript = _build_transcript(messages)
     skills = ", ".join(job.required_skills or [])
+    rubric = job.scoring_rubric
     is_swe = (job.role_type or "").lower() in _SWE_ROLE_TYPES
 
-    if is_swe:
+    if rubric and isinstance(rubric, list) and len(rubric) > 0:
+        prompt = _build_custom_rubric_prompt(transcript, job, rubric)
+        is_swe = False
+    elif is_swe:
         config = job.interview_config or {}
         experience_level = config.get("experience_level", "mid")
         prompt = SWE_SCORING_PROMPT.format(
@@ -118,6 +122,53 @@ async def score_interview(session_id: str, db: AsyncSession) -> CandidateReport 
         recommendation=report.recommendation,
     )
     return report
+
+
+def _build_custom_rubric_prompt(transcript: str, job: JobPosting, rubric: list[dict]) -> str:
+    """Build a scoring prompt using custom rubric dimensions."""
+    dimensions_text = "\n".join(
+        f"- **{dim['dimension']}** (weight: {dim.get('weight', 1.0)}): "
+        f"{dim.get('description', '')}"
+        for dim in rubric
+    )
+    skills = ", ".join(job.required_skills or [])
+
+    return f"""Analyze this interview transcript and score the candidate using the custom rubric.
+
+## Transcript
+{transcript[:8000]}
+
+## Job Context
+- Role: {job.title}
+- Required Skills: {skills}
+
+## Custom Scoring Rubric
+Score each of these dimensions from 0.0 to 10.0:
+
+{dimensions_text}
+
+Return a JSON object:
+{{
+  "skill_scores": {{
+    "dimension_name": {{"score": 8.0, "evidence": "Quote from transcript", "notes": "Assessment"}},
+    ...one entry per rubric dimension...
+  }},
+  "behavioral_scores": {{}},
+  "overall_score": 7.5,
+  "confidence_score": 0.85,
+  "summary": "3-4 sentence executive summary",
+  "strengths": ["Specific strength with evidence"],
+  "concerns": ["Specific concern with evidence"],
+  "recommendation": "Strong Hire | Hire | Lean No Hire | No Hire"
+}}
+
+IMPORTANT:
+- Score ALL dimensions listed in the rubric above.
+- Weight the overall_score according to the weights provided.
+- Every score MUST have direct evidence from the transcript.
+- If a dimension was not assessed during the interview, score it as null and note "Not assessed."
+
+Return ONLY valid JSON, no markdown or explanation."""
 
 
 def _build_transcript(messages: list[InterviewMessage]) -> str:

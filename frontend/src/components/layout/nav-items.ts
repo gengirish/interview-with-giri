@@ -21,6 +21,7 @@ export const navItems: NavItem[] = [
   { label: "Jobs", href: "/dashboard/jobs", icon: Briefcase },
   { label: "Interviews", href: "/dashboard/interviews", icon: MessageSquare },
   { label: "Reports", href: "/dashboard/reports", icon: FileText },
+  { label: "Compare", href: "/dashboard/compare", icon: BarChart3 },
   { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
   {
     label: "Team",

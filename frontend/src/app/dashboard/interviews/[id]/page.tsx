@@ -30,6 +30,10 @@ import {
   ClipboardList,
   Target,
   Download,
+  Share2,
+  Trash2,
+  Send,
+  Users,
 } from "lucide-react";
 import { cn, formatDuration, formatDate } from "@/lib/utils";
 import Link from "next/link";
@@ -183,6 +187,34 @@ export default function InterviewDetailPage() {
   const [activeTab, setActiveTab] = useState<"scorecard" | "integrity" | "transcript">(
     "scorecard",
   );
+  const [comments, setComments] = useState<
+    Array<{
+      id: string;
+      user_id: string;
+      user_name: string;
+      user_email: string;
+      content: string;
+      mentioned_user_ids: string[];
+      created_at: string;
+    }>
+  >([]);
+  const [orgMembers, setOrgMembers] = useState<
+    Array<{ id: string; email: string; full_name: string }>
+  >([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [commentInput, setCommentInput] = useState("");
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState("");
+  const [postingComment, setPostingComment] = useState(false);
+
+  async function loadComments() {
+    try {
+      const c = await api.getComments(id);
+      setComments(c);
+    } catch {
+      setComments([]);
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -212,6 +244,18 @@ export default function InterviewDetailPage() {
           } else {
             setIntegrity("none");
           }
+        }
+
+        loadComments();
+        try {
+          const [members, me] = await Promise.all([
+            api.getOrgMembersForMentions(),
+            api.getCurrentUser(),
+          ]);
+          setOrgMembers(members);
+          setCurrentUserId(me.id);
+        } catch {
+          // Non-critical
         }
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to load interview details");
@@ -426,6 +470,22 @@ export default function InterviewDetailPage() {
           )}
           {report && (
             <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const { share_url } = await api.shareReport(id);
+                    await navigator.clipboard.writeText(share_url);
+                    toast.success("Share link copied to clipboard");
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Failed to create share link");
+                  }
+                }}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                <Share2 className="h-4 w-4" />
+                Share Report
+              </button>
               <button
                 type="button"
                 onClick={async () => {
@@ -1068,6 +1128,160 @@ export default function InterviewDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Team Discussion */}
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div className="flex items-center gap-2 border-b border-slate-200 px-6 py-4">
+          <Users className="h-5 w-5 text-indigo-600" />
+          <h3 className="text-sm font-semibold text-slate-900">Team Discussion</h3>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {comments.map((c) => (
+            <div key={c.id} className="flex gap-3 px-6 py-4">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-sm font-semibold text-indigo-700">
+                {(c.user_name || c.user_email || "?").charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium text-slate-900">
+                    {c.user_name || c.user_email}
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    {new Date(c.created_at).toLocaleString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                  {currentUserId === c.user_id && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await api.deleteComment(id, c.id);
+                          await loadComments();
+                          toast.success("Comment deleted");
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : "Failed to delete");
+                        }
+                      }}
+                      className="ml-auto rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-red-600 transition-colors"
+                      aria-label="Delete comment"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                <p className="mt-1 text-sm text-slate-700 whitespace-pre-wrap">
+                  {c.content.split(/(@\S+@\S+\.\S+)/g).map((part, i) =>
+                    part.match(/@\S+@\S+\.\S+/) ? (
+                      <span key={i} className="text-blue-600 font-medium">
+                        {part}
+                      </span>
+                    ) : (
+                      part
+                    )
+                  )}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="relative border-t border-slate-200 p-4">
+          {!report && (
+            <p className="mb-3 text-sm text-slate-500">
+              Generate a report first to add comments.
+            </p>
+          )}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <textarea
+                disabled={!report}
+                value={commentInput}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCommentInput(v);
+                  const lastAt = v.lastIndexOf("@");
+                  if (lastAt >= 0) {
+                    const after = v.slice(lastAt + 1);
+                    if (!/\s/.test(after) || after.length === 0) {
+                      setShowMentionDropdown(true);
+                      setMentionFilter(after);
+                    } else {
+                      setShowMentionDropdown(false);
+                    }
+                  } else {
+                    setShowMentionDropdown(false);
+                  }
+                }}
+                onBlur={() => setTimeout(() => setShowMentionDropdown(false), 150)}
+                placeholder="Add a comment... Use @email to mention colleagues"
+                className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                rows={2}
+              />
+              {showMentionDropdown && orgMembers.length > 0 && (
+                <div className="absolute bottom-full left-0 right-0 mb-1 max-h-40 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                  {orgMembers
+                    .filter(
+                      (m) =>
+                        !mentionFilter ||
+                        m.email.toLowerCase().includes(mentionFilter.toLowerCase()) ||
+                        m.full_name.toLowerCase().includes(mentionFilter.toLowerCase())
+                    )
+                    .map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          const lastAt = commentInput.lastIndexOf("@");
+                          const before = commentInput.slice(0, lastAt);
+                          setCommentInput(`${before}@${m.email} `);
+                          setShowMentionDropdown(false);
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                      >
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-200 text-xs font-medium text-slate-700">
+                          {(m.full_name || m.email).charAt(0).toUpperCase()}
+                        </span>
+                        <span className="truncate">{m.full_name}</span>
+                        <span className="truncate text-slate-500">{m.email}</span>
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                const content = commentInput.trim();
+                if (!content || postingComment) return;
+                setPostingComment(true);
+                try {
+                  await api.addComment(id, content);
+                  setCommentInput("");
+                  await loadComments();
+                  toast.success("Comment posted");
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Failed to post comment");
+                } finally {
+                  setPostingComment(false);
+                }
+              }}
+              disabled={!report || !commentInput.trim() || postingComment}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {postingComment ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              Post
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

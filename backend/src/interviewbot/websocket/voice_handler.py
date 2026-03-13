@@ -48,9 +48,18 @@ async def handle_voice_interview(websocket: WebSocket, token: str, db: AsyncSess
     config = job.interview_config or {}
     total_questions = config.get("num_questions", 10)
 
+    resume_text = None
+    if session.resume_url:
+        from interviewbot.routers.uploads import UPLOAD_DIR, _extract_pdf_text
+
+        filename = session.resume_url.split("/")[-1]
+        file_path = UPLOAD_DIR / filename
+        if file_path.exists():
+            resume_text = _extract_pdf_text(file_path)
+
     engine = AIEngine()
     pipeline = VoiceInterviewPipeline()
-    system_prompt = _build_system_prompt(job, config)
+    system_prompt = _build_system_prompt(job, config, resume_text=resume_text)
     conversation = InterviewConversation(system_prompt)
 
     session.status = "in_progress"
@@ -229,3 +238,11 @@ async def handle_voice_interview(websocket: WebSocket, token: str, db: AsyncSess
             },
             db,
         )
+
+    # Auto-generate report
+    with contextlib.suppress(Exception):
+        from interviewbot.services.scoring_engine import score_interview
+
+        report = await score_interview(str(session.id), db)
+        if report:
+            logger.info("auto_report_generated", session_id=str(session.id))

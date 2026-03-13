@@ -126,6 +126,22 @@ async def deactivate_user(
     return _to_response(target)
 
 
+@router.get("/org-members")
+async def list_org_members_for_mentions(
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
+    db: AsyncSession = Depends(get_db),
+    org_id: UUID = Depends(get_org_id),
+) -> list[dict]:
+    """List org members for @mention suggestions (id, email, full_name)."""
+    result = await db.execute(
+        select(User.id, User.email, User.full_name).where(
+            User.org_id == org_id, User.is_active.is_(True)
+        )
+    )
+    rows = result.all()
+    return [{"id": str(r.id), "email": r.email, "full_name": r.full_name} for r in rows]
+
+
 @router.get("/me", response_model=UserResponse)
 async def get_current_user_profile(
     user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),

@@ -1,13 +1,16 @@
+import contextlib
 import csv
+from datetime import datetime
 import io
 import secrets
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from interviewbot.config import get_settings
 from interviewbot.dependencies import get_db, get_org_id, require_role
 from interviewbot.models.schemas import (
     InterviewConfig,
@@ -18,9 +21,16 @@ from interviewbot.models.schemas import (
     PaginatedResponse,
     RoleType,
 )
-from interviewbot.models.tables import InterviewSession, JobPosting
+from interviewbot.models.tables import InterviewSession, JobPosting, Organization
 
 router = APIRouter(prefix="/job-postings", tags=["Job Postings"])
+
+
+class GenerateLinkRequest(BaseModel):
+    candidate_name: str | None = None
+    candidate_email: str | None = None
+    scheduled_at: datetime | None = None
+
 
 IMPORT_COLUMNS = [
     "title",
@@ -50,6 +60,7 @@ async def create_job_posting(
         required_skills=req.required_skills,
         interview_format=req.interview_format.value,
         interview_config=req.interview_config.model_dump(),
+        scoring_rubric=req.scoring_rubric,
     )
     db.add(posting)
     await db.commit()
@@ -153,22 +164,65 @@ async def delete_job_posting(
 @router.post("/{posting_id}/generate-link", response_model=dict)
 async def generate_interview_link(
     posting_id: UUID,
+    body: GenerateLinkRequest | None = None,
     user: dict = Depends(require_role("admin", "hiring_manager")),
     db: AsyncSession = Depends(get_db),
     org_id: UUID = Depends(get_org_id),
-) -> dict[str, str]:
-    await _get_posting_or_404(db, org_id, posting_id)
+) -> dict:
+    posting = await _get_posting_or_404(db, org_id, posting_id)
 
     token = secrets.token_urlsafe(32)
     session = InterviewSession(
         job_posting_id=posting_id,
         org_id=org_id,
         token=token,
+        candidate_name=body.candidate_name if body else None,
+        candidate_email=body.candidate_email if body else None,
+        scheduled_at=body.scheduled_at if body else None,
     )
     db.add(session)
     await db.commit()
 
-    return {"token": token, "interview_url": f"/interview/{token}"}
+    result: dict = {"token": token, "interview_url": f"/interview/{token}"}
+
+    # Send calendar invite if scheduled
+    if body and body.scheduled_at and body.candidate_email:
+        with contextlib.suppress(Exception):
+            from interviewbot.services.calendar_service import generate_ics_invite
+            from interviewbot.services.notifications import send_interview_invitation
+
+            settings = get_settings()
+            interview_url = f"{settings.app_url}/interview/{token}"
+            config = posting.interview_config or {}
+            duration = config.get("duration_minutes", 30)
+
+            ics_content = generate_ics_invite(
+                summary=f"Interview: {posting.title}",
+                description=f"AI Interview for {posting.title}\nJoin: {interview_url}",
+                start_time=body.scheduled_at,
+                duration_minutes=duration,
+                attendee_email=body.candidate_email,
+                location=interview_url,
+            )
+            result["ics_content"] = ics_content
+            result["scheduled_at"] = body.scheduled_at.isoformat()
+
+            # Fetch org for invitation email
+            org_result = await db.execute(select(Organization).where(Organization.id == org_id))
+            org = org_result.scalar_one_or_none()
+            org_name = org.name if org else "Company"
+            org_inbox_id = org.agentmail_inbox_id if org else None
+
+            await send_interview_invitation(
+                body.candidate_email,
+                body.candidate_name or "Candidate",
+                posting.title,
+                interview_url,
+                org_name=org_name,
+                org_inbox_id=org_inbox_id,
+            )
+
+    return result
 
 
 @router.post("/{posting_id}/extract-skills", response_model=dict)
@@ -374,6 +428,7 @@ def _to_response(posting: JobPosting) -> JobPostingResponse:
         required_skills=posting.required_skills or [],
         interview_format=posting.interview_format,
         interview_config=posting.interview_config or {},
+        scoring_rubric=posting.scoring_rubric,
         is_active=posting.is_active,
         created_at=posting.created_at,
     )

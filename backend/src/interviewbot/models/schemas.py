@@ -86,6 +86,7 @@ class InterviewConfig(BaseModel):
     duration_minutes: int = Field(30, ge=10, le=120)
     difficulty: str = Field("medium")
     include_coding: bool = False
+    language: str = Field("en", description="Interview language code (e.g. en, es, fr, hi, zh)")
 
 
 class JobPostingCreateRequest(BaseModel):
@@ -95,6 +96,9 @@ class JobPostingCreateRequest(BaseModel):
     required_skills: list[str] = Field(default_factory=list)
     interview_format: InterviewFormat = InterviewFormat.TEXT
     interview_config: InterviewConfig = Field(default_factory=InterviewConfig)
+    scoring_rubric: list[dict] | None = Field(
+        None, description="Custom scoring dimensions with weights"
+    )
 
 
 class JobPostingUpdateRequest(BaseModel):
@@ -103,6 +107,7 @@ class JobPostingUpdateRequest(BaseModel):
     required_skills: list[str] | None = None
     interview_format: InterviewFormat | None = None
     interview_config: InterviewConfig | None = None
+    scoring_rubric: list[dict] | None = None
     is_active: bool | None = None
 
 
@@ -115,6 +120,7 @@ class JobPostingResponse(BaseModel):
     required_skills: list[str]
     interview_format: InterviewFormat
     interview_config: dict
+    scoring_rubric: list[dict] | None = None
     is_active: bool
     created_at: datetime
     interview_link: str | None = None
@@ -318,6 +324,13 @@ class JobAnalyticsResponse(BaseModel):
     avg_duration_minutes: float | None
 
 
+class BrandingInfo(BaseModel):
+    logo_url: str = ""
+    primary_color: str = "#4F46E5"
+    company_name: str = ""
+    tagline: str = ""
+
+
 class PublicInterviewInfoResponse(BaseModel):
     token: str
     status: str
@@ -325,6 +338,7 @@ class PublicInterviewInfoResponse(BaseModel):
     job_title: str
     job_description: str
     interview_config: dict
+    branding: BrandingInfo = Field(default_factory=BrandingInfo)
 
 
 class InterviewStartResponse(BaseModel):

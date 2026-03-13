@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from interviewbot.dependencies import get_db, get_org_id, require_role
 from interviewbot.models.schemas import AnalyticsOverviewResponse, JobAnalyticsResponse
-from interviewbot.models.tables import InterviewSession, JobPosting
+from interviewbot.models.tables import CandidateReport, InterviewSession, JobPosting
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
@@ -171,4 +171,61 @@ async def analytics_per_job(
             else None,
         )
         for row in rows
+    ]
+
+
+@router.get("/compare")
+async def compare_candidates(
+    job_id: UUID = Query(...),
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
+    db: AsyncSession = Depends(get_db),
+    org_id: UUID = Depends(get_org_id),
+) -> list[dict]:
+    """Return all completed candidates for a job with their scores for comparison."""
+    result = await db.execute(
+        select(
+            InterviewSession.id,
+            InterviewSession.candidate_name,
+            InterviewSession.candidate_email,
+            InterviewSession.overall_score,
+            InterviewSession.duration_seconds,
+            InterviewSession.completed_at,
+            InterviewSession.is_shortlisted,
+            CandidateReport.skill_scores,
+            CandidateReport.behavioral_scores,
+            CandidateReport.recommendation,
+            CandidateReport.confidence_score,
+            CandidateReport.strengths,
+            CandidateReport.concerns,
+            CandidateReport.ai_summary,
+        )
+        .select_from(InterviewSession)
+        .outerjoin(CandidateReport, CandidateReport.session_id == InterviewSession.id)
+        .where(
+            InterviewSession.job_posting_id == job_id,
+            InterviewSession.org_id == org_id,
+            InterviewSession.status == "completed",
+        )
+        .order_by(InterviewSession.overall_score.desc().nullslast())
+    )
+    rows = result.all()
+
+    return [
+        {
+            "session_id": str(r.id),
+            "candidate_name": r.candidate_name,
+            "candidate_email": r.candidate_email,
+            "overall_score": float(r.overall_score) if r.overall_score else None,
+            "duration_seconds": r.duration_seconds,
+            "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+            "is_shortlisted": r.is_shortlisted,
+            "skill_scores": r.skill_scores or {},
+            "behavioral_scores": r.behavioral_scores or {},
+            "recommendation": r.recommendation,
+            "confidence_score": float(r.confidence_score) if r.confidence_score else None,
+            "strengths": r.strengths or [],
+            "concerns": r.concerns or [],
+            "ai_summary": r.ai_summary,
+        }
+        for r in rows
     ]

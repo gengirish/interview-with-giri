@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import csv
+from datetime import UTC, datetime, timedelta
 import io
+import secrets
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -9,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from interviewbot.config import get_settings
 from interviewbot.dependencies import get_db, get_org_id, require_role
 from interviewbot.models.schemas import (
     CandidateReportResponse,
@@ -105,6 +108,36 @@ async def _fetch_session_and_report(
         )
 
     return session, report
+
+
+@router.get("/public/{share_token}", response_model=CandidateReportResponse)
+async def get_public_report(
+    share_token: str,
+    db: AsyncSession = Depends(get_db),
+) -> CandidateReportResponse:
+    """Access a shared report via public token (no auth required)."""
+    result = await db.execute(
+        select(CandidateReport).where(CandidateReport.share_token == share_token)
+    )
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+
+    if report.share_expires_at and report.share_expires_at < datetime.now(UTC):
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE, detail="This shared link has expired"
+        )
+
+    session_result = await db.execute(
+        select(InterviewSession).where(InterviewSession.id == report.session_id)
+    )
+    session = session_result.scalar_one_or_none()
+
+    return _to_response(
+        report,
+        session.candidate_name if session else None,
+        session.overall_score if session else None,
+    )
 
 
 @router.post("/{session_id}/generate", response_model=CandidateReportResponse)
@@ -237,6 +270,31 @@ async def export_report_csv(
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.post("/{session_id}/share")
+async def share_report(
+    session_id: UUID,
+    hours: int = Query(72, ge=1, le=720),
+    user: dict = Depends(require_role("admin", "hiring_manager")),
+    db: AsyncSession = Depends(get_db),
+    org_id: UUID = Depends(get_org_id),
+):
+    """Generate a shareable public link for a report (expires after N hours)."""
+    _session, report = await _fetch_session_and_report(session_id, db, org_id)
+
+    token = secrets.token_urlsafe(32)
+    report.share_token = token
+    report.share_expires_at = datetime.now(UTC) + timedelta(hours=hours)
+    await db.commit()
+
+    settings = get_settings()
+    share_url = f"{settings.app_url}/reports/shared/{token}"
+    return {
+        "share_url": share_url,
+        "share_token": token,
+        "expires_at": report.share_expires_at.isoformat(),
+    }
 
 
 def _to_dimensional_score(v: dict) -> DimensionalScore:

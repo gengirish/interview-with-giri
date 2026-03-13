@@ -63,7 +63,7 @@ class FollowUpTracker:
         return hints.get(level, "")
 
 
-def _build_system_prompt(job: JobPosting, config: dict) -> str:
+def _build_system_prompt(job: JobPosting, config: dict, resume_text: str | None = None) -> str:
     skills = ", ".join(job.required_skills or [])
     role_type = job.role_type or "mixed"
 
@@ -116,13 +116,29 @@ def _build_system_prompt(job: JobPosting, config: dict) -> str:
             "Respond with ONLY the interview question or follow-up."
         )
 
-    return template.format(
+    prompt = template.format(
         title=job.title,
         jd=job.job_description[:1500],
         skills=skills,
         difficulty=config.get("difficulty", "medium"),
         total=config.get("num_questions", 10),
     )
+    language = config.get("language", "en")
+    if language and language != "en":
+        prompt += (
+            f"\n\nIMPORTANT: Conduct this entire interview in the language "
+            f"specified by code '{language}'. Ask all questions, provide all "
+            f"responses, and communicate entirely in that language. "
+            f"Only use English for technical terms that have no standard translation."
+        )
+    if resume_text:
+        prompt += (
+            f"\n\n## Candidate Resume\n"
+            f"The candidate has provided their resume. Use this context to personalize "
+            f"your questions - reference their specific experience, projects, and skills:\n"
+            f"{resume_text[:3000]}"
+        )
+    return prompt
 
 
 async def _save_message(db: AsyncSession, session_id, role: str, content: str) -> None:
@@ -152,6 +168,9 @@ async def _handle_end_interview(
         questions=questions,
     )
 
+    job_title = "Unknown"
+    org_inbox_id = None
+    hiring_manager_email = None
     with contextlib.suppress(Exception):
         job_result = await db.execute(
             select(JobPosting).where(JobPosting.id == session.job_posting_id)
@@ -170,17 +189,7 @@ async def _handle_end_interview(
         )
         hiring_manager = user_result.scalars().first()
         hiring_manager_email = hiring_manager.email if hiring_manager else None
-        if hiring_manager_email:
-            settings = get_settings()
-            report_url = f"{settings.app_url}/dashboard/interviews/{session.id}"
-            await send_interview_completed(
-                hiring_manager_email,
-                session.candidate_name or "",
-                job_title,
-                float(session.overall_score) if session.overall_score else None,
-                report_url,
-                org_inbox_id=org_inbox_id,
-            )
+
     with contextlib.suppress(Exception):
         await dispatch_webhook(
             str(session.org_id),
@@ -192,6 +201,26 @@ async def _handle_end_interview(
             },
             db,
         )
+
+    # Auto-generate report
+    with contextlib.suppress(Exception):
+        from interviewbot.services.scoring_engine import score_interview
+
+        report = await score_interview(str(session.id), db)
+        if report:
+            logger.info("auto_report_generated", session_id=str(session.id))
+            # Update the email notification with the actual score
+            if hiring_manager_email and session.overall_score:
+                settings_obj = get_settings()
+                report_url = f"{settings_obj.app_url}/dashboard/interviews/{session.id}"
+                await send_interview_completed(
+                    hiring_manager_email,
+                    session.candidate_name or "",
+                    job_title,
+                    float(session.overall_score),
+                    report_url,
+                    org_inbox_id=org_inbox_id,
+                )
 
 
 async def _process_candidate_message(
@@ -299,8 +328,17 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
     total_questions = config.get("num_questions", 10)
     is_technical = (job.role_type or "").lower() in ("technical", "mixed")
 
+    resume_text = None
+    if session.resume_url:
+        from interviewbot.routers.uploads import UPLOAD_DIR, _extract_pdf_text
+
+        filename = session.resume_url.split("/")[-1]
+        file_path = UPLOAD_DIR / filename
+        if file_path.exists():
+            resume_text = _extract_pdf_text(file_path)
+
     engine = AIEngine()
-    system_prompt = _build_system_prompt(job, config)
+    system_prompt = _build_system_prompt(job, config, resume_text=resume_text)
     conversation = InterviewConversation(system_prompt)
     tracker = FollowUpTracker(max_depth=3) if is_technical else None
 

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from interviewbot.dependencies import get_db, get_org_id, require_role
 from interviewbot.models.schemas import (
+    BrandingInfo,
     InterviewMessageResponse,
     InterviewSessionResponse,
     InterviewStartRequest,
@@ -15,7 +16,7 @@ from interviewbot.models.schemas import (
     PaginatedResponse,
     PublicInterviewInfoResponse,
 )
-from interviewbot.models.tables import InterviewMessage, InterviewSession, JobPosting
+from interviewbot.models.tables import InterviewMessage, InterviewSession, JobPosting, Organization
 from interviewbot.routers.auth import limiter
 
 router = APIRouter(prefix="/interviews", tags=["Interviews"])
@@ -102,6 +103,29 @@ async def get_interview(
     return _session_to_response(session)
 
 
+@router.patch("/{session_id}/shortlist")
+async def toggle_shortlist(
+    session_id: UUID,
+    user: dict = Depends(require_role("admin", "hiring_manager")),
+    db: AsyncSession = Depends(get_db),
+    org_id: UUID = Depends(get_org_id),
+):
+    """Toggle the shortlisted status of an interview session."""
+    result = await db.execute(
+        select(InterviewSession).where(
+            InterviewSession.id == session_id,
+            InterviewSession.org_id == org_id,
+        )
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Interview not found")
+
+    session.is_shortlisted = not session.is_shortlisted
+    await db.commit()
+    return {"session_id": str(session.id), "is_shortlisted": session.is_shortlisted}
+
+
 @router.patch("/{session_id}/cancel")
 async def cancel_interview(
     session_id: UUID,
@@ -182,6 +206,11 @@ async def get_public_interview(
     )
     job = job_result.scalar_one_or_none()
 
+    org_result = await db.execute(select(Organization).where(Organization.id == session.org_id))
+    org = org_result.scalar_one_or_none()
+    org_settings = org.settings or {} if org else {}
+    branding = org_settings.get("branding", {})
+
     return PublicInterviewInfoResponse(
         token=session.token,
         status=session.status,
@@ -189,6 +218,12 @@ async def get_public_interview(
         job_title=job.title if job else "Unknown Position",
         job_description=job.job_description[:500] if job else "",
         interview_config=job.interview_config if job else {},
+        branding=BrandingInfo(
+            logo_url=branding.get("logo_url", ""),
+            primary_color=branding.get("primary_color", "#4F46E5"),
+            company_name=branding.get("company_name", org.name if org else ""),
+            tagline=branding.get("tagline", ""),
+        ),
     )
 
 

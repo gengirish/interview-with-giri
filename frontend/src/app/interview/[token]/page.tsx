@@ -10,6 +10,8 @@ import {
   MessageSquare,
   AlertTriangle,
   CheckCircle,
+  FileText,
+  Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { InterviewPhase } from "@/lib/types";
@@ -23,10 +25,19 @@ export default function CandidateInterviewPage() {
   const [jobTitle, setJobTitle] = useState("");
   const [jobDescription, setJobDescription] = useState("");
   const [interviewConfig, setInterviewConfig] = useState<Record<string, unknown>>({});
+  const [branding, setBranding] = useState<{
+    logo_url?: string;
+    primary_color?: string;
+    company_name?: string;
+    tagline?: string;
+  } | null>(null);
   const [error, setError] = useState("");
 
   const [candidateName, setCandidateName] = useState("");
   const [candidateEmail, setCandidateEmail] = useState("");
+  const [resumeUploading, setResumeUploading] = useState(false);
+  const [resumeUploaded, setResumeUploaded] = useState<string | null>(null);
+  const [resumeError, setResumeError] = useState<string | null>(null);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -74,6 +85,9 @@ export default function CandidateInterviewPage() {
         setJobDescription(data.job_description as string || "");
         setInterviewConfig(config);
         setTotal((config.num_questions as number) || 10);
+        setBranding(
+          (data.branding as { logo_url?: string; primary_color?: string; company_name?: string; tagline?: string }) ?? null,
+        );
         setPhase("consent");
       } catch {
         setError("Interview not found or link expired.");
@@ -96,6 +110,29 @@ export default function CandidateInterviewPage() {
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [phase]);
+
+  async function handleResumeUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !token) return;
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      setResumeError("Only PDF files are accepted");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setResumeError("File too large (max 5 MB)");
+      return;
+    }
+    setResumeError(null);
+    setResumeUploading(true);
+    try {
+      const result = await api.uploadResume(token, file);
+      setResumeUploaded(result.filename);
+    } catch {
+      setResumeError("Upload failed. You can continue without a resume.");
+    } finally {
+      setResumeUploading(false);
+    }
+  }
 
   async function handleConsent(e: React.FormEvent) {
     e.preventDefault();
@@ -278,12 +315,27 @@ export default function CandidateInterviewPage() {
       <div className="flex min-h-screen items-center justify-center bg-slate-950 p-4">
         <div className="w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-800 p-8">
           <div className="flex items-center gap-3 mb-6">
-            <div className="h-10 w-10 rounded-xl bg-indigo-600 flex items-center justify-center">
-              <MessageSquare className="h-5 w-5 text-white" />
-            </div>
+            {branding?.logo_url ? (
+              <img
+                src={branding.logo_url}
+                alt={branding.company_name || "Logo"}
+                className="h-10 w-10 rounded-xl object-contain"
+              />
+            ) : (
+              <div
+                className="h-10 w-10 rounded-xl flex items-center justify-center"
+                style={{ backgroundColor: primaryColor }}
+              >
+                <MessageSquare className="h-5 w-5 text-white" />
+              </div>
+            )}
             <div>
-              <h1 className="text-xl font-bold text-white">InterviewBot</h1>
-              <p className="text-xs text-slate-400">AI-Powered Interview</p>
+              <h1 className="text-xl font-bold text-white">
+                {branding?.company_name || "InterviewBot"}
+              </h1>
+              <p className="text-xs text-slate-400">
+                {branding?.tagline || "AI-Powered Interview"}
+              </p>
             </div>
           </div>
 
@@ -323,6 +375,44 @@ export default function CandidateInterviewPage() {
               />
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Resume (optional)
+              </label>
+              <p className="text-xs text-slate-500 mb-2">
+                Upload your resume to get personalized questions. PDF only, max 5
+                MB.
+              </p>
+              <div className="flex items-center gap-3">
+                <label className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-dashed border-slate-600 bg-slate-800/50 px-4 py-3 cursor-pointer hover:bg-slate-800 transition-colors">
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    onChange={handleResumeUpload}
+                    disabled={resumeUploading}
+                    className="hidden"
+                  />
+                  {resumeUploading ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+                  ) : resumeUploaded ? (
+                    <FileText className="h-4 w-4 text-green-400" />
+                  ) : (
+                    <Upload className="h-4 w-4 text-slate-400" />
+                  )}
+                  <span className="text-sm text-slate-400">
+                    {resumeUploading
+                      ? "Uploading..."
+                      : resumeUploaded
+                        ? "Resume uploaded"
+                        : "Choose PDF"}
+                  </span>
+                </label>
+              </div>
+              {resumeError && (
+                <p className="mt-1 text-xs text-red-400">{resumeError}</p>
+              )}
+            </div>
+
             <div className="rounded-lg bg-slate-800/50 p-3 text-xs text-slate-400">
               <p className="font-medium text-slate-300 mb-1">
                 Before you begin:
@@ -341,7 +431,8 @@ export default function CandidateInterviewPage() {
 
             <button
               type="submit"
-              className="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+              className="w-full rounded-lg py-2.5 text-sm font-medium text-white transition-colors"
+              style={{ backgroundColor: primaryColor }}
             >
               I Agree &mdash; Continue
             </button>
@@ -381,12 +472,25 @@ export default function CandidateInterviewPage() {
       )}
       <header className="flex items-center justify-between border-b border-slate-800 px-6 py-3">
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-indigo-600 flex items-center justify-center">
-            <MessageSquare className="h-4 w-4 text-white" />
-          </div>
+          {branding?.logo_url ? (
+            <img
+              src={branding.logo_url}
+              alt={branding.company_name || ""}
+              className="h-8 w-8 rounded-lg object-contain"
+            />
+          ) : (
+            <div
+              className="h-8 w-8 rounded-lg flex items-center justify-center"
+              style={{ backgroundColor: primaryColor }}
+            >
+              <MessageSquare className="h-4 w-4 text-white" />
+            </div>
+          )}
           <div>
             <h1 className="text-sm font-semibold text-white">{jobTitle}</h1>
-            <p className="text-xs text-slate-500">AI Interview</p>
+            <p className="text-xs text-slate-500">
+              {branding?.company_name || "AI Interview"}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -409,8 +513,11 @@ export default function CandidateInterviewPage() {
       {/* Progress bar */}
       <div className="h-1 bg-slate-800">
         <div
-          className="h-full bg-indigo-600 transition-all duration-500"
-          style={{ width: `${(progress / total) * 100}%` }}
+          className="h-full transition-all duration-500"
+          style={{
+            width: `${(progress / total) * 100}%`,
+            backgroundColor: primaryColor,
+          }}
         />
       </div>
 
@@ -429,9 +536,14 @@ export default function CandidateInterviewPage() {
                 className={cn(
                   "max-w-[80%] rounded-2xl px-4 py-3 text-sm",
                   msg.role === "candidate"
-                    ? "bg-indigo-600 text-white rounded-br-sm"
+                    ? "text-white rounded-br-sm"
                     : "bg-slate-800 text-slate-200 rounded-bl-sm",
                 )}
+                style={
+                  msg.role === "candidate"
+                    ? { backgroundColor: primaryColor }
+                    : undefined
+                }
               >
                 {msg.content}
               </div>
@@ -471,7 +583,8 @@ export default function CandidateInterviewPage() {
           <button
             type="submit"
             disabled={thinking || !input.trim()}
-            className="rounded-xl bg-indigo-600 p-3 text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            className="rounded-xl p-3 text-white disabled:opacity-50 transition-colors"
+            style={{ backgroundColor: primaryColor }}
             aria-label="Send message"
           >
             <Send className="h-5 w-5" />
