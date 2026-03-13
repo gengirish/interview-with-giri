@@ -168,13 +168,14 @@ def test_ws_send_message_get_response() -> None:
 
 
 def test_ws_interview_ends_after_max_questions() -> None:
-    """With num_questions=2, interview ends after 2 AI responses."""
+    """With num_questions=3, interview ends after 3 AI responses."""
     _, factory = _ws_engine_and_factory()
     app = _make_app(factory)
 
-    first_q = "What is Python?"
-    end_msg = "Thank you for your time."
-    mock_chat = AsyncMock(side_effect=[first_q, end_msg])
+    q1_text = "What is Python?"
+    q2_text = "Tell me about decorators."
+    end_text = "Thank you for your time."
+    mock_chat = AsyncMock(side_effect=[q1_text, q2_text, end_text])
 
     with (
         patch(
@@ -196,15 +197,15 @@ def test_ws_interview_ends_after_max_questions() -> None:
                 assert q1["progress"] == 1
                 assert q1["total"] == 3
 
-                ws.send_json(
-                    {
-                        "type": "message",
-                        "content": "Python is a programming language.",
-                    }
-                )
+                ws.send_json({"type": "message", "content": "A programming language."})
+                msg = ws.receive_json()
+                if msg["type"] == "thinking":
+                    msg = ws.receive_json()
+                assert msg["type"] in ("question", "code_review")
 
+                ws.send_json({"type": "message", "content": "Decorators wrap functions."})
                 msg = ws.receive_json()
                 if msg["type"] == "thinking":
                     msg = ws.receive_json()
                 assert msg["type"] == "end"
-                assert msg["content"] == end_msg
+                assert msg["content"] == end_text
