@@ -116,6 +116,7 @@ export default function VoiceInterviewPage() {
         ]);
         setThinking(false);
         setProgress(data.progress || 0);
+        speakText(data.content);
       } else if (data.type === "transcript") {
         setTranscript((t) => [
           ...t,
@@ -132,6 +133,7 @@ export default function VoiceInterviewPage() {
           ]);
         }
         if (data.audio) playAudio(data.audio);
+        else if (content) speakText(content);
         intentionalCloseRef.current = true;
         interviewActiveRef.current = false;
         setPhase("completed");
@@ -188,6 +190,18 @@ export default function VoiceInterviewPage() {
       URL.revokeObjectURL(url);
     };
     audio.play().catch(() => setIsPlaying(false));
+  }
+
+  function speakText(text: string) {
+    if (!("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.95;
+    utterance.pitch = 1.0;
+    setIsPlaying(true);
+    utterance.onend = () => setIsPlaying(false);
+    utterance.onerror = () => setIsPlaying(false);
+    window.speechSynthesis.speak(utterance);
   }
 
   function startInterview() {

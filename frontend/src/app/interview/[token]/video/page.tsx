@@ -119,6 +119,11 @@ export default function VideoInterviewPage() {
           const blob = new Blob([audioBytes], { type: "audio/mpeg" });
           const audio = new Audio(URL.createObjectURL(blob));
           audio.play().catch(() => {});
+        } else if (content && "speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(content);
+          utterance.rate = 0.95;
+          window.speechSynthesis.speak(utterance);
         }
       } else if (data.type === "transcript") {
         setTranscript((t) => [...t, { role: "candidate", content: data.content }]);
@@ -126,7 +131,15 @@ export default function VideoInterviewPage() {
         setThinking(true);
       } else if (data.type === "end") {
         const content = data.text || data.content || "";
-        if (content) setTranscript((t) => [...t, { role: "interviewer", content }]);
+        if (content) {
+          setTranscript((t) => [...t, { role: "interviewer", content }]);
+          if ("speechSynthesis" in window) {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(content);
+            utterance.rate = 0.95;
+            window.speechSynthesis.speak(utterance);
+          }
+        }
         setPhase("completed");
         ws.close();
         if (timerRef.current) clearInterval(timerRef.current);
@@ -301,7 +314,7 @@ export default function VideoInterviewPage() {
               <p className="font-medium text-slate-300 mb-1">Requirements:</p>
               <ul className="space-y-1 list-disc list-inside">
                 <li>Camera and microphone access required</li>
-                <li>Your video will be recorded</li>
+                <li>Your video is used for a face-to-face experience</li>
                 <li>Find a well-lit, quiet environment</li>
               </ul>
             </div>

@@ -1,13 +1,79 @@
-"""Voice interview pipeline: STT (Whisper) -> LLM -> TTS (ElevenLabs)."""
+"""Voice interview pipeline: STT -> LLM -> TTS.
 
+STT providers (in priority order): Gemini, OpenAI Whisper
+TTS providers (in priority order): ElevenLabs, browser-native (text-only fallback)
+"""
+
+from __future__ import annotations
+
+import asyncio
 from collections.abc import AsyncIterator
 import io
+from typing import Protocol
 
 import structlog
 
 from interviewbot.config import get_settings
 
 logger = structlog.get_logger()
+
+
+class STTProvider(Protocol):
+    async def transcribe(self, audio_bytes: bytes, format: str = "webm") -> str: ...
+
+
+class TTSProvider(Protocol):
+    async def synthesize(self, text: str) -> bytes: ...
+
+    async def synthesize_stream(self, text: str) -> AsyncIterator[bytes]: ...
+
+
+class GeminiSTT:
+    """Speech-to-text using Google Gemini (supports audio natively)."""
+
+    def __init__(self) -> None:
+        settings = get_settings()
+        self.api_key = settings.gemini_api_key
+        self.model = settings.gemini_model
+
+    async def transcribe(self, audio_bytes: bytes, format: str = "webm") -> str:
+        from google import genai
+        from google.genai import types
+
+        mime_map = {
+            "webm": "audio/webm",
+            "wav": "audio/wav",
+            "mp3": "audio/mpeg",
+            "ogg": "audio/ogg",
+            "m4a": "audio/mp4",
+            "flac": "audio/flac",
+        }
+        mime_type = mime_map.get(format, "audio/webm")
+
+        client = genai.Client(api_key=self.api_key)
+
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model=self.model,
+            contents=[
+                types.Content(
+                    parts=[
+                        types.Part(
+                            inline_data=types.Blob(
+                                mime_type=mime_type,
+                                data=audio_bytes,
+                            )
+                        ),
+                        types.Part(
+                            text="Transcribe the speech in this audio clip exactly. "
+                            "Return ONLY the transcription text, nothing else. "
+                            "If no speech is detected, return an empty string."
+                        ),
+                    ]
+                )
+            ],
+        )
+        return (response.text or "").strip()
 
 
 class WhisperSTT:
@@ -34,7 +100,7 @@ class WhisperSTT:
 class ElevenLabsTTS:
     """Text-to-speech using ElevenLabs API with streaming."""
 
-    VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # Rachel - professional female voice
+    VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
 
     def __init__(self) -> None:
         settings = get_settings()
@@ -51,10 +117,7 @@ class ElevenLabsTTS:
         payload = {
             "text": text,
             "model_id": "eleven_monolingual_v1",
-            "voice_settings": {
-                "stability": 0.75,
-                "similarity_boost": 0.75,
-            },
+            "voice_settings": {"stability": 0.75, "similarity_boost": 0.75},
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -73,10 +136,7 @@ class ElevenLabsTTS:
         payload = {
             "text": text,
             "model_id": "eleven_monolingual_v1",
-            "voice_settings": {
-                "stability": 0.75,
-                "similarity_boost": 0.75,
-            },
+            "voice_settings": {"stability": 0.75, "similarity_boost": 0.75},
         }
 
         async with (
@@ -89,21 +149,37 @@ class ElevenLabsTTS:
 
 
 class VoiceInterviewPipeline:
-    """Orchestrates the full voice interview pipeline."""
+    """Orchestrates the full voice interview pipeline.
+
+    STT priority: Gemini -> Whisper (OpenAI)
+    TTS priority: ElevenLabs -> None (frontend handles text-only fallback)
+    """
 
     def __init__(self) -> None:
         settings = get_settings()
-        self.stt: WhisperSTT | None = None
+        self.stt: STTProvider | None = None
         self.tts: ElevenLabsTTS | None = None
+        self.tts_available = False
 
-        if settings.openai_api_key:
+        if settings.gemini_api_key:
+            self.stt = GeminiSTT()
+            logger.info("stt_provider", provider="gemini")
+        elif settings.openai_api_key:
             self.stt = WhisperSTT()
+            logger.info("stt_provider", provider="whisper")
+
         if settings.elevenlabs_api_key:
             self.tts = ElevenLabsTTS()
+            self.tts_available = True
+            logger.info("tts_provider", provider="elevenlabs")
+        else:
+            logger.info("tts_provider", provider="browser_native")
 
     async def process_audio(self, audio_bytes: bytes, format: str = "webm") -> str:
         if not self.stt:
-            raise RuntimeError("STT not configured. Set OPENAI_API_KEY.")
+            raise RuntimeError(
+                "STT not configured. Set GEMINI_API_KEY or OPENAI_API_KEY."
+            )
         transcript = await self.stt.transcribe(audio_bytes, format)
         logger.info("stt_transcribed", length=len(transcript))
         return transcript
