@@ -238,9 +238,7 @@ async def import_job_postings(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, f"Failed to parse file: {exc}"
-        ) from exc
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Failed to parse file: {exc}") from exc
 
     if not rows:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "File contains no data rows")
