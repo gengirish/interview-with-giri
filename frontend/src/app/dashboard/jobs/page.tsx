@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ImportJobsModal } from "@/components/import-jobs-modal";
 import { api, type JobPosting } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import {
@@ -12,6 +13,7 @@ import {
   Sparkles,
   Loader2,
   Briefcase,
+  Upload,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -56,6 +58,7 @@ export default function JobsPage() {
   const [extracting, setExtracting] = useState<string | null>(null);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [deleteJobId, setDeleteJobId] = useState<string | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
   const loadJobs = useCallback(async () => {
     try {
@@ -170,13 +173,22 @@ export default function JobsPage() {
           </p>
         </div>
         {canEdit && (
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            New Job
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowImport(true)}
+              className="flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              <Upload className="h-4 w-4" />
+              Import CSV
+            </button>
+            <button
+              onClick={() => setShowForm(!showForm)}
+              className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              New Job
+            </button>
+          </div>
         )}
       </div>
 
@@ -475,6 +487,12 @@ export default function JobsPage() {
         description="Are you sure you want to delete this job posting? This action cannot be undone."
         confirmLabel="Delete"
         variant="danger"
+      />
+
+      <ImportJobsModal
+        open={showImport}
+        onClose={() => setShowImport(false)}
+        onImported={loadJobs}
       />
     </div>
   );

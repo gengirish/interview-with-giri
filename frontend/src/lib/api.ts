@@ -307,6 +307,46 @@ export const api = {
       { method: "POST" },
     ),
 
+  importJobPostings: async (file: File) => {
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const formData = new FormData();
+    formData.append("file", file);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60_000);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/job-postings/import`, {
+        method: "POST",
+        body: formData,
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new ApiError(
+          res.status,
+          (body as { detail?: string }).detail || "Import failed",
+        );
+      }
+      return res.json() as Promise<{
+        total_rows: number;
+        created: number;
+        errors: number;
+        results: { row: number; title?: string; status: string; error?: string }[];
+      }>;
+    } catch (err) {
+      clearTimeout(timeoutId);
+      throw err;
+    }
+  },
+
+  getImportTemplate: () =>
+    request<{
+      columns: string[];
+      sample_row: Record<string, string>;
+    }>("/api/v1/job-postings/import/template"),
+
   extractSkills: (id: string) =>
     request<{
       technical_skills: string[];
