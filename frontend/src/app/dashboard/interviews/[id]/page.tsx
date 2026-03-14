@@ -40,6 +40,7 @@ import {
 import { cn, formatDuration, formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { toast } from "sonner";
+import { useWalkthrough } from "@/hooks/use-walkthrough";
 import {
   PolarGrid,
   PolarAngleAxis,
@@ -206,6 +207,7 @@ function getAllDimensions(report: CandidateReport) {
 
 export default function InterviewDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { startTourIfNew } = useWalkthrough();
   const [session, setSession] = useState<InterviewSession | null>(null);
   const [messages, setMessages] = useState<InterviewMessage[]>([]);
   const [report, setReport] = useState<CandidateReport | null>(null);
@@ -316,6 +318,10 @@ export default function InterviewDetailPage() {
     }
     load();
   }, [id]);
+
+  useEffect(() => {
+    if (!loading) startTourIfNew("interview-detail");
+  }, [loading, startTourIfNew]);
 
   async function handleGenerateReport() {
     setGenerating(true);
@@ -664,9 +670,9 @@ export default function InterviewDetailPage() {
       {activeTab === "scorecard" && (
         <>
         {report ? (
-          <div className="space-y-6">
+          <div data-tour="scorecard" className="space-y-6">
             {/* Export buttons */}
-            <div className="flex gap-2">
+            <div data-tour="export" className="flex gap-2">
               <button
                 onClick={async () => {
                   try {
@@ -1193,7 +1199,7 @@ export default function InterviewDetailPage() {
       )}
 
       {activeTab === "highlights" && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div data-tour="highlights" className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="border-b border-slate-200 px-6 py-4">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
               <Zap className="h-4 w-4 text-amber-500" />
@@ -1255,7 +1261,7 @@ export default function InterviewDetailPage() {
       )}
 
       {activeTab === "transcript" && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div data-tour="transcript" className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="divide-y divide-slate-100">
             {messages.map((msg, idx) => (
               <div
@@ -1289,7 +1295,7 @@ export default function InterviewDetailPage() {
       )}
 
       {/* Team Discussion */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div data-tour="discussion" className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
         <div className="flex items-center gap-2 border-b border-slate-200 px-6 py-4">
           <Users className="h-5 w-5 text-indigo-600" />
           <h3 className="text-sm font-semibold text-slate-900">Team Discussion</h3>

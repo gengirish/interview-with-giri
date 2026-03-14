@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useWalkthrough } from "@/hooks/use-walkthrough";
 
 type CompareCandidate = {
   session_id: string;
@@ -72,6 +73,7 @@ function scoreBgColor(score: number | null): string {
 }
 
 export default function ComparePage() {
+  const { startTourIfNew } = useWalkthrough();
   const [jobs, setJobs] = useState<JobPosting[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<CompareCandidate[]>([]);
@@ -123,6 +125,10 @@ export default function ComparePage() {
   useEffect(() => {
     loadCandidates();
   }, [loadCandidates]);
+
+  useEffect(() => {
+    if (!loading) startTourIfNew("compare-page");
+  }, [loading, startTourIfNew]);
 
   const handleToggleShortlist = async (sessionId: string) => {
     setTogglingId(sessionId);
@@ -301,7 +307,7 @@ export default function ComparePage() {
       </div>
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
+        <div data-tour="compare-job-select" className="flex flex-wrap items-center gap-3">
           <label className="text-sm font-medium text-slate-700">Job</label>
           <select
             value={selectedJobId ?? ""}
@@ -330,6 +336,7 @@ export default function ComparePage() {
 
         <div className="flex items-center gap-2">
           <button
+            data-tour="compare-debrief"
             onClick={handleGenerateDebrief}
             disabled={candidates.length < 2 || debriefLoading}
             className="inline-flex items-center gap-2 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 shadow-sm hover:bg-indigo-100 disabled:opacity-50"
@@ -374,7 +381,7 @@ export default function ComparePage() {
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div data-tour="compare-table" className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[800px]">
               <thead>
@@ -431,6 +438,7 @@ export default function ComparePage() {
                     </span>
                   </th>
                   <th
+                    data-tour="compare-shortlist"
                     className="cursor-pointer px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 hover:bg-slate-100"
                     onClick={() => handleSort("is_shortlisted")}
                   >

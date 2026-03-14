@@ -15,6 +15,7 @@ import {
 import { cn, formatDuration, formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { toast } from "sonner";
+import { useWalkthrough } from "@/hooks/use-walkthrough";
 
 const statusConfig: Record<
   string,
@@ -48,6 +49,7 @@ const statusConfig: Record<
 };
 
 export default function InterviewsPage() {
+  const { startTourIfNew } = useWalkthrough();
   const [sessions, setSessions] = useState<InterviewSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("");
@@ -95,6 +97,10 @@ export default function InterviewsPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (!loading) startTourIfNew("interviews-page");
+  }, [loading, startTourIfNew]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -114,7 +120,7 @@ export default function InterviewsPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
+      <div data-tour="interviews-filter" className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
         <input
           placeholder="Search by candidate name..."
           value={candidateName}
@@ -177,20 +183,20 @@ export default function InterviewsPage() {
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div data-tour="interviews-table" className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
                 <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Candidate
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th data-tour="interview-status" className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Status
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Format
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th data-tour="interview-score" className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Score
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
@@ -199,7 +205,7 @@ export default function InterviewsPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Date
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th data-tour="interview-actions" className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>

@@ -1,3 +1,4 @@
+import { LandingWalkthrough } from "@/components/walkthrough/landing-walkthrough";
 import Link from "next/link";
 import {
   MessageSquare,
@@ -61,7 +62,7 @@ function Navbar() {
 
 function Hero() {
   return (
-    <section className="relative overflow-hidden pt-32 pb-20 sm:pt-40 sm:pb-28">
+    <section data-tour="hero" className="relative overflow-hidden pt-32 pb-20 sm:pt-40 sm:pb-28">
       <div className="absolute inset-0 -z-10 bg-gradient-to-br from-indigo-50 via-white to-purple-50/40" />
       <div className="absolute left-1/2 top-0 -z-10 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-indigo-100/50 blur-3xl" />
 
@@ -152,7 +153,7 @@ const FEATURES = [
 
 function Features() {
   return (
-    <section id="features" className="bg-white py-24">
+    <section id="features" data-tour="features" className="bg-white py-24">
       <div className="mx-auto max-w-7xl px-6">
         <div className="text-center">
           <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
@@ -207,7 +208,7 @@ const STEPS = [
 
 function HowItWorks() {
   return (
-    <section id="how-it-works" className="bg-gradient-to-b from-slate-50 to-white py-24">
+    <section id="how-it-works" data-tour="how-it-works" className="bg-gradient-to-b from-slate-50 to-white py-24">
       <div className="mx-auto max-w-7xl px-6">
         <div className="text-center">
           <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
@@ -364,7 +365,7 @@ const PLANS = [
 
 function Pricing() {
   return (
-    <section id="pricing" className="bg-gradient-to-b from-slate-50 to-white py-24">
+    <section id="pricing" data-tour="pricing" className="bg-gradient-to-b from-slate-50 to-white py-24">
       <div className="mx-auto max-w-7xl px-6">
         <div className="text-center">
           <h2 className="text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
@@ -426,7 +427,7 @@ function Pricing() {
 
 function CTA() {
   return (
-    <section className="bg-indigo-600 py-20">
+    <section data-tour="cta" className="bg-indigo-600 py-20">
       <div className="mx-auto max-w-7xl px-6 text-center">
         <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
           Ready to transform your hiring process?
@@ -486,6 +487,7 @@ export default function Home() {
       <Pricing />
       <CTA />
       <Footer />
+      <LandingWalkthrough />
     </main>
   );
 }

@@ -6,6 +6,7 @@ import { GenerateLinkModal } from "@/components/generate-link-modal";
 import { ImportJobsModal } from "@/components/import-jobs-modal";
 import { api, type JobPosting } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
+import { useWalkthrough } from "@/hooks/use-walkthrough";
 import {
   Plus,
   Trash2,
@@ -88,6 +89,7 @@ export default function JobsPage() {
   const { hasRole } = useAuth();
   const canEdit = hasRole("admin", "hiring_manager");
   const canDelete = hasRole("admin");
+  const { startTourIfNew } = useWalkthrough();
   const [jobs, setJobs] = useState<JobPosting[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -137,6 +139,10 @@ export default function JobsPage() {
       setLoading(false);
     }
   }, [page, searchQuery, roleTypeFilter, interviewFormatFilter, isActiveFilter]);
+
+  useEffect(() => {
+    if (!loading) startTourIfNew("jobs-page");
+  }, [loading, startTourIfNew]);
 
   useEffect(() => {
     loadJobs();
@@ -282,6 +288,7 @@ export default function JobsPage() {
               Import CSV
             </button>
             <button
+              data-tour="create-job"
               onClick={() => setShowForm(!showForm)}
               className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
             >
@@ -292,7 +299,7 @@ export default function JobsPage() {
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
+      <div data-tour="jobs-filter" className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
           <input
             placeholder="Search jobs..."
             value={searchQuery}
@@ -742,7 +749,7 @@ export default function JobsPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div data-tour="jobs-list" className="space-y-4">
           {jobs.map((job) => (
             <div
               key={job.id}
@@ -764,7 +771,7 @@ export default function JobsPage() {
                     >
                       {job.is_active ? "Active" : "Inactive"}
                     </span>
-                    <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700">
+                    <span data-tour="job-format" className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs font-medium text-indigo-700">
                       {job.interview_format}
                     </span>
                     <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
@@ -815,6 +822,7 @@ export default function JobsPage() {
                   )}
                   {canEdit && (
                     <button
+                      data-tour="generate-link"
                       onClick={() => handleOpenGenerateLink(job)}
                       className="flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
                     >

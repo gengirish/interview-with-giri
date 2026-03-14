@@ -19,6 +19,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useWalkthrough } from "@/hooks/use-walkthrough";
 
 type SkillsInsights = {
   total_candidates: number;
@@ -33,6 +34,7 @@ type SkillsInsights = {
 };
 
 export default function AnalyticsPage() {
+  const { startTourIfNew } = useWalkthrough();
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
   const [jobStats, setJobStats] = useState<JobAnalytics[]>([]);
   const [skillsInsights, setSkillsInsights] = useState<SkillsInsights | null>(
@@ -96,6 +98,10 @@ export default function AnalyticsPage() {
   useEffect(() => {
     fetchSkillsInsights(skillsInsightsJobId);
   }, [skillsInsightsJobId, fetchSkillsInsights]);
+
+  useEffect(() => {
+    if (!loading) startTourIfNew("analytics-page");
+  }, [loading, startTourIfNew]);
 
   if (loading) {
     return (
@@ -196,7 +202,7 @@ export default function AnalyticsPage() {
         return (
           <>
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div data-tour="analytics-kpis" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {[
           {
             label: "Total",
@@ -254,7 +260,7 @@ export default function AnalyticsPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Score Distribution */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div data-tour="analytics-score-dist" className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h3 className="text-sm font-semibold text-slate-900 mb-4">
             Score Distribution
           </h3>
@@ -351,7 +357,7 @@ export default function AnalyticsPage() {
 
       {/* Candidate Experience */}
       {satisfaction && satisfaction.total_responses > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div data-tour="analytics-satisfaction" className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h3 className="text-sm font-semibold text-slate-900 mb-4">
             Candidate Experience
           </h3>
@@ -683,7 +689,7 @@ export default function AnalyticsPage() {
 
       {/* Per-Job Analytics */}
       {jobStats.length > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <div data-tour="analytics-per-job" className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-200">
             <h3 className="text-sm font-semibold text-slate-900">
               Per-Job Performance

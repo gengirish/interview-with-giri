@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { Sidebar } from "@/components/layout/sidebar";
+import { WalkthroughProvider } from "@/components/walkthrough/walkthrough-provider";
+import { HelpButton } from "@/components/walkthrough/help-button";
 
 export default function DashboardLayout({
   children,
@@ -35,15 +37,18 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50/30">
-      <Sidebar className="fixed inset-y-0 left-0 z-30 hidden lg:flex" />
-      <MobileNav />
-      <div className="pt-16 lg:pl-64 lg:pt-0">
-        <header className="sticky top-0 z-20 flex h-16 items-center border-b border-slate-200 bg-white/80 backdrop-blur-sm px-6">
-          <h2 className="text-lg font-semibold text-slate-900">Dashboard</h2>
-        </header>
-        <main className="p-4 sm:p-6 lg:p-8">{children}</main>
+    <WalkthroughProvider syncToServer>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50/30">
+        <Sidebar className="fixed inset-y-0 left-0 z-30 hidden lg:flex" />
+        <MobileNav />
+        <div className="pt-16 lg:pl-64 lg:pt-0">
+          <header className="sticky top-0 z-20 flex h-16 items-center border-b border-slate-200 bg-white/80 backdrop-blur-sm px-6">
+            <h2 className="text-lg font-semibold text-slate-900">Dashboard</h2>
+          </header>
+          <main className="p-4 sm:p-6 lg:p-8">{children}</main>
+        </div>
+        <HelpButton />
       </div>
-    </div>
+    </WalkthroughProvider>
   );
 }

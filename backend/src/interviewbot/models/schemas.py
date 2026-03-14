@@ -423,6 +423,20 @@ class UpdateUserRoleRequest(BaseModel):
     role: UserRole
 
 
+# --- Walkthrough ---
+
+
+class WalkthroughState(BaseModel):
+    completed: dict[str, bool] = Field(default_factory=dict)
+    skipped: dict[str, bool] = Field(default_factory=dict)
+    version: int = 1
+
+
+class WalkthroughUpdateRequest(BaseModel):
+    completed: dict[str, bool] | None = None
+    skipped: dict[str, bool] | None = None
+
+
 # --- Behavior Analytics / Proctoring ---
 
 

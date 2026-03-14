@@ -10,6 +10,8 @@ from interviewbot.models.schemas import (
     PaginatedResponse,
     UpdateUserRoleRequest,
     UserResponse,
+    WalkthroughState,
+    WalkthroughUpdateRequest,
 )
 from interviewbot.models.tables import User
 
@@ -152,6 +154,55 @@ async def get_current_user_profile(
     if not db_user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
     return _to_response(db_user)
+
+
+@router.get("/me/walkthrough", response_model=WalkthroughState)
+async def get_walkthrough_progress(
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
+    db: AsyncSession = Depends(get_db),
+) -> WalkthroughState:
+    result = await db.execute(select(User).where(User.id == UUID(user["sub"])))
+    db_user = result.scalar_one_or_none()
+    if not db_user:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    progress = db_user.walkthrough_progress or {}
+    return WalkthroughState(
+        completed=progress.get("completed", {}),
+        skipped=progress.get("skipped", {}),
+        version=progress.get("version", 1),
+    )
+
+
+@router.patch("/me/walkthrough", response_model=WalkthroughState)
+async def update_walkthrough_progress(
+    req: WalkthroughUpdateRequest,
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
+    db: AsyncSession = Depends(get_db),
+) -> WalkthroughState:
+    result = await db.execute(select(User).where(User.id == UUID(user["sub"])))
+    db_user = result.scalar_one_or_none()
+    if not db_user:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+
+    current = dict(db_user.walkthrough_progress or {})
+    if req.completed is not None:
+        merged_completed = {**current.get("completed", {}), **req.completed}
+        current["completed"] = merged_completed
+    if req.skipped is not None:
+        merged_skipped = {**current.get("skipped", {}), **req.skipped}
+        current["skipped"] = merged_skipped
+    current["version"] = 1
+
+    db_user.walkthrough_progress = current
+    await db.commit()
+    await db.refresh(db_user)
+
+    updated = db_user.walkthrough_progress or {}
+    return WalkthroughState(
+        completed=updated.get("completed", {}),
+        skipped=updated.get("skipped", {}),
+        version=updated.get("version", 1),
+    )
 
 
 def _to_response(u: User) -> UserResponse:

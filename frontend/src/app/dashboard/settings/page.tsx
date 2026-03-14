@@ -15,8 +15,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useWalkthrough } from "@/hooks/use-walkthrough";
 
 export default function SettingsPage() {
+  const { startTourIfNew } = useWalkthrough();
   const [sub, setSub] = useState<SubscriptionInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("billing");
@@ -149,6 +151,10 @@ export default function SettingsPage() {
         .finally(() => setBrandingLoading(false));
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (!loading) startTourIfNew("settings-page");
+  }, [loading, startTourIfNew]);
 
   async function handleSetupEmail() {
     setEmailSetupLoading(true);
@@ -300,7 +306,7 @@ export default function SettingsPage() {
       </div>
 
       {activeTab === "billing" && sub && (
-        <div className="space-y-6">
+        <div data-tour="settings-billing" className="space-y-6">
           {/* Current Plan */}
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-900">
@@ -458,7 +464,7 @@ export default function SettingsPage() {
       )}
 
       {activeTab === "branding" && (
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div data-tour="settings-branding" className="grid gap-6 lg:grid-cols-2">
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-900">
               Custom Branding
@@ -722,7 +728,7 @@ export default function SettingsPage() {
       )}
 
       {activeTab === "webhooks" && (
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div data-tour="settings-webhooks" className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h3 className="text-sm font-semibold text-slate-900">
             Webhook Configuration
           </h3>
@@ -861,7 +867,7 @@ export default function SettingsPage() {
       )}
 
       {activeTab === "integrations" && (
-        <div className="space-y-6">
+        <div data-tour="settings-ats" className="space-y-6">
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-900">
               ATS Integrations

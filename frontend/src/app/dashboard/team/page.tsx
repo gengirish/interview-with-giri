@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { api, type OrgUser } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
+import { useWalkthrough } from "@/hooks/use-walkthrough";
 import { toast } from "sonner";
 
 const ROLE_OPTIONS = [
@@ -23,6 +24,7 @@ const ROLE_OPTIONS = [
 
 export default function TeamPage() {
   const { hasRole, isAuthenticated } = useAuth();
+  const { startTourIfNew } = useWalkthrough();
   const router = useRouter();
   const [users, setUsers] = useState<OrgUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,6 +47,10 @@ export default function TeamPage() {
       loadUsers();
     }
   }, [isAuthenticated, hasRole, router]);
+
+  useEffect(() => {
+    if (!loading) startTourIfNew("team-page");
+  }, [loading, startTourIfNew]);
 
   async function loadUsers() {
     try {
@@ -113,6 +119,7 @@ export default function TeamPage() {
           </p>
         </div>
         <button
+          data-tour="team-invite"
           onClick={() => setShowInvite(!showInvite)}
           className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
         >
@@ -219,11 +226,11 @@ export default function TeamPage() {
         </form>
       )}
 
-      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+      <div data-tour="team-list" className="rounded-xl border border-slate-200 bg-white overflow-hidden">
         <div className="px-6 py-3 bg-slate-50 border-b border-slate-200">
           <div className="grid grid-cols-12 gap-4 text-xs font-medium text-slate-500 uppercase tracking-wider">
             <div className="col-span-4">Member</div>
-            <div className="col-span-3">Role</div>
+            <div data-tour="team-roles" className="col-span-3">Role</div>
             <div className="col-span-2">Status</div>
             <div className="col-span-3 text-right">Actions</div>
           </div>

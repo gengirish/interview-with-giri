@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { api, type DashboardStats } from "@/lib/api";
+import { useWalkthrough } from "@/hooks/use-walkthrough";
 import {
   Briefcase,
   MessageSquare,
@@ -18,6 +19,11 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { startTourIfNew } = useWalkthrough();
+
+  useEffect(() => {
+    if (!loading) startTourIfNew("dashboard-overview");
+  }, [loading, startTourIfNew]);
 
   const fetchStats = () => {
     setError(null);
@@ -115,7 +121,7 @@ export default function DashboardPage() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div data-tour="stats-cards" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {cards.map((card) => (
             <div
               key={card.label}
@@ -142,7 +148,7 @@ export default function DashboardPage() {
       )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div data-tour="getting-started" className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">
             Getting Started
           </h2>
@@ -163,7 +169,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div data-tour="quick-actions" className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Quick Actions</h2>
           <div className="mt-4 space-y-3">
             <Link

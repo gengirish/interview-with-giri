@@ -6,8 +6,10 @@ import { FileText, Loader2, Eye } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import Link from "next/link";
 import { toast } from "sonner";
+import { useWalkthrough } from "@/hooks/use-walkthrough";
 
 export default function ReportsPage() {
+  const { startTourIfNew } = useWalkthrough();
   const [sessions, setSessions] = useState<InterviewSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -39,6 +41,10 @@ export default function ReportsPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (!loading) startTourIfNew("reports-page");
+  }, [loading, startTourIfNew]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -67,7 +73,7 @@ export default function ReportsPage() {
           </p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div data-tour="reports-list" className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
@@ -77,7 +83,7 @@ export default function ReportsPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Job
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <th data-tour="report-recommendation" className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Score
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
@@ -122,7 +128,7 @@ export default function ReportsPage() {
                   <td className="px-4 py-3 text-sm text-slate-600">
                     {formatDate(s.completed_at ?? s.created_at)}
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td data-tour="report-view" className="px-4 py-3 text-right">
                     <Link
                       href={`/dashboard/interviews/${s.id}`}
                       className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"

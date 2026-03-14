@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { InterviewPhase } from "@/lib/types";
+import { WalkthroughProvider } from "@/components/walkthrough/walkthrough-provider";
+import { useWalkthrough } from "@/hooks/use-walkthrough";
 
 type ChatMessage = { role: "interviewer" | "candidate"; content: string };
 
@@ -346,9 +348,10 @@ function PracticeCompleteView({
   );
 }
 
-export default function CandidateInterviewPage() {
+function InterviewContent() {
   const { token } = useParams<{ token: string }>();
   const router = useRouter();
+  const { startTourIfNew } = useWalkthrough();
   const [phase, setPhase] = useState<InterviewPhase>("loading");
   const [jobTitle, setJobTitle] = useState("");
   const [jobDescription, setJobDescription] = useState("");
@@ -447,6 +450,12 @@ export default function CandidateInterviewPage() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, thinking]);
+
+  useEffect(() => {
+    if (phase === "consent" || phase === "interview") {
+      startTourIfNew("candidate-interview");
+    }
+  }, [phase, startTourIfNew]);
 
   useEffect(() => {
     function handleVisibility() {
@@ -836,7 +845,7 @@ export default function CandidateInterviewPage() {
             </p>
           </div>
 
-          <form onSubmit={handleConsent} className="space-y-4">
+          <form data-tour="consent-form" onSubmit={handleConsent} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">
                 Full Name
@@ -984,11 +993,11 @@ export default function CandidateInterviewPage() {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5 text-xs text-slate-400">
+          <div data-tour="interview-timer" className="flex items-center gap-1.5 text-xs text-slate-400">
             <Clock className="h-3.5 w-3.5" />
             {formatTime(elapsed)}
           </div>
-          <div className="text-xs text-slate-500">
+          <div data-tour="progress-indicator" className="text-xs text-slate-500">
             Q {progress}/{total}
           </div>
           {tabSwitches > 0 && (
@@ -1012,7 +1021,7 @@ export default function CandidateInterviewPage() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+      <div data-tour="chat-interface" className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
         <div className="max-w-3xl mx-auto space-y-4">
           {messages.map((msg, i) => (
             <div
@@ -1082,5 +1091,13 @@ export default function CandidateInterviewPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function CandidateInterviewPage() {
+  return (
+    <WalkthroughProvider>
+      <InterviewContent />
+    </WalkthroughProvider>
   );
 }

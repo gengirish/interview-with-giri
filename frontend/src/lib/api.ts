@@ -843,6 +843,20 @@ export const api = {
       },
     ),
 
+  // Walkthrough
+  getWalkthrough: () =>
+    request<{ completed: Record<string, boolean>; skipped: Record<string, boolean>; version: number }>(
+      "/api/v1/users/me/walkthrough",
+    ),
+  updateWalkthrough: (data: { completed?: Record<string, boolean>; skipped?: Record<string, boolean> }) =>
+    request<{ completed: Record<string, boolean>; skipped: Record<string, boolean>; version: number }>(
+      "/api/v1/users/me/walkthrough",
+      {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      },
+    ),
+
   // Code Execution
   executeCode: (
     sourceCode: string,

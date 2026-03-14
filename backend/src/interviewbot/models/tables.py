@@ -46,6 +46,7 @@ class User(Base):
     full_name = Column(String(255), nullable=False)
     role = Column(String(50), nullable=False, default="viewer")
     is_active = Column(Boolean, default=True)
+    walkthrough_progress = Column(JSONB, default=dict)
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
     organization = relationship("Organization", back_populates="users")

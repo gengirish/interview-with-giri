@@ -220,6 +220,22 @@ export async function setupDashboardMocks(page: Page, options?: {
         contentType: "application/json",
         body: JSON.stringify(analyticsPerJob),
       });
+    } else if (url.includes("/users/me/walkthrough")) {
+      if (method === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ completed: {}, skipped: {}, version: 1 }),
+        });
+      } else if (method === "PATCH") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ completed: {}, skipped: {}, version: 1 }),
+        });
+      } else {
+        await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
+      }
     } else if (url.includes("/users") && !url.includes("/me")) {
       await route.fulfill({
         status: 200,
