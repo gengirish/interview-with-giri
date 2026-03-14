@@ -664,6 +664,45 @@ export const api = {
   getPublicInterview: (token: string) =>
     request<Record<string, unknown>>(`/api/v1/interviews/public/${token}`),
 
+  // Coach
+  getCoachingReport: (token: string) =>
+    request<{
+      session_id: string;
+      candidate_name: string;
+      job_title: string;
+      role_type: string;
+      duration_seconds: number | null;
+      readiness_score: number;
+      readiness_label: string;
+      summary: string;
+      strengths: Array<{
+        title: string;
+        detail: string;
+        question_index: number;
+      }>;
+      improvements: Array<{
+        title: string;
+        detail: string;
+        tip: string;
+        priority: string;
+        question_index: number;
+      }>;
+      question_feedback: Array<{
+        question_index: number;
+        question_summary: string;
+        score: number;
+        what_went_well: string;
+        what_to_improve: string;
+        sample_answer_snippet: string;
+      }>;
+      study_plan: Array<{
+        topic: string;
+        reason: string;
+        resources: string;
+      }>;
+      star_method_tips: string[];
+    }>(`/api/v1/coach/analyze/${token}`, { method: "POST" }),
+
   // Practice Mode
   startPractice: (data: {
     template_id?: string;

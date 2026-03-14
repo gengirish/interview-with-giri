@@ -16,6 +16,7 @@ from interviewbot.routers import (
     ats,
     auth,
     billing,
+    coach,
     code_execution,
     comments,
     dashboard,
@@ -123,6 +124,7 @@ def create_app() -> FastAPI:
     app.include_router(ai_ask.router, prefix="/api/v1")
     app.include_router(feedback.router, prefix="/api/v1")
     app.include_router(practice.router, prefix="/api/v1")
+    app.include_router(coach.router, prefix="/api/v1")
     app.include_router(proctoring.router, prefix="/api/v1")
     app.include_router(billing.router, prefix="/api/v1")
     app.include_router(users.router, prefix="/api/v1")

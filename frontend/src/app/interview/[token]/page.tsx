@@ -13,11 +13,338 @@ import {
   FileText,
   Upload,
   Star,
+  Sparkles,
+  Target,
+  TrendingUp,
+  BookOpen,
+  ChevronDown,
+  ChevronUp,
+  ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { InterviewPhase } from "@/lib/types";
 
 type ChatMessage = { role: "interviewer" | "candidate"; content: string };
+
+type CoachingReport = Awaited<ReturnType<typeof api.getCoachingReport>>;
+
+function PracticeCompleteView({
+  token,
+  elapsed,
+  formatTime,
+}: {
+  token: string;
+  elapsed: number;
+  formatTime: (s: number) => string;
+}) {
+  const router = useRouter();
+  const [report, setReport] = useState<CoachingReport | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expandedQ, setExpandedQ] = useState<number | null>(null);
+
+  const handleGetReport = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await api.getCoachingReport(token);
+      setReport(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to generate report");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const readinessColor = (score: number) => {
+    if (score >= 86) return "text-emerald-400";
+    if (score >= 70) return "text-green-400";
+    if (score >= 40) return "text-amber-400";
+    return "text-red-400";
+  };
+
+  const readinessBg = (score: number) => {
+    if (score >= 86) return "bg-emerald-500/10 border-emerald-500/20";
+    if (score >= 70) return "bg-green-500/10 border-green-500/20";
+    if (score >= 40) return "bg-amber-500/10 border-amber-500/20";
+    return "bg-red-500/10 border-red-500/20";
+  };
+
+  const priorityBadge = (p: string) => {
+    const styles: Record<string, string> = {
+      high: "bg-red-500/10 text-red-400",
+      medium: "bg-amber-500/10 text-amber-400",
+      low: "bg-blue-500/10 text-blue-400",
+    };
+    return styles[p] || styles.medium;
+  };
+
+  const scoreColor = (s: number) => {
+    if (s >= 8) return "text-emerald-400";
+    if (s >= 6) return "text-green-400";
+    if (s >= 4) return "text-amber-400";
+    return "text-red-400";
+  };
+
+  if (!report) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-950 p-4">
+        <div className="max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-8 text-center">
+          <CheckCircle className="mx-auto h-12 w-12 text-green-400" />
+          <h2 className="mt-4 text-xl font-bold text-white">
+            Practice Complete!
+          </h2>
+          <p className="mt-2 text-sm text-slate-400">
+            Get a personalized AI coaching report with actionable feedback.
+          </p>
+          {elapsed > 0 && (
+            <p className="mt-3 text-xs text-slate-500">
+              Duration: {formatTime(elapsed)}
+            </p>
+          )}
+          {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
+          <button
+            onClick={handleGetReport}
+            disabled={loading}
+            className="mt-6 w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 px-8 py-3 text-sm font-medium text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Analyzing Your Performance...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4" />
+                Get AI Coaching Report
+              </>
+            )}
+          </button>
+          <button
+            onClick={() => router.push("/practice")}
+            className="mt-3 w-full rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 px-8 py-3 text-sm font-medium text-slate-300 transition-colors"
+          >
+            Practice Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white pb-16">
+      {/* Header */}
+      <div className="max-w-3xl mx-auto px-4 pt-8">
+        <div className="flex items-center gap-2 text-sm text-indigo-400 mb-4">
+          <Sparkles className="h-4 w-4" />
+          AI Interview Coach
+        </div>
+        <h1 className="text-2xl font-bold">Your Coaching Report</h1>
+        <p className="text-slate-400 mt-1">
+          {report.job_title} &middot; {report.candidate_name}
+        </p>
+      </div>
+
+      {/* Readiness Score */}
+      <div className="max-w-3xl mx-auto px-4 mt-6">
+        <div
+          className={`rounded-xl border p-6 text-center ${readinessBg(report.readiness_score)}`}
+        >
+          <p className="text-sm text-slate-400 uppercase tracking-wider">
+            Interview Readiness
+          </p>
+          <p className={`text-5xl font-bold mt-2 ${readinessColor(report.readiness_score)}`}>
+            {report.readiness_score}
+            <span className="text-lg text-slate-500">/100</span>
+          </p>
+          <p className={`mt-1 text-sm font-medium ${readinessColor(report.readiness_score)}`}>
+            {report.readiness_label}
+          </p>
+          <p className="mt-3 text-sm text-slate-400 max-w-lg mx-auto">
+            {report.summary}
+          </p>
+        </div>
+      </div>
+
+      {/* Question-by-Question Feedback */}
+      <div className="max-w-3xl mx-auto px-4 mt-8">
+        <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
+          <MessageSquare className="h-5 w-5 text-indigo-400" />
+          Question-by-Question Feedback
+        </h2>
+        <div className="space-y-3">
+          {report.question_feedback.map((qf, i) => (
+            <div
+              key={i}
+              className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden"
+            >
+              <button
+                onClick={() => setExpandedQ(expandedQ === i ? null : i)}
+                className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-slate-800/50 transition-colors"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <span
+                    className={`text-lg font-bold ${scoreColor(qf.score)}`}
+                  >
+                    {qf.score}
+                  </span>
+                  <span className="text-sm text-slate-300 truncate">
+                    {qf.question_summary}
+                  </span>
+                </div>
+                {expandedQ === i ? (
+                  <ChevronUp className="h-4 w-4 text-slate-500 flex-shrink-0" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-slate-500 flex-shrink-0" />
+                )}
+              </button>
+              {expandedQ === i && (
+                <div className="px-4 pb-4 space-y-3 border-t border-slate-800">
+                  <div className="pt-3">
+                    <p className="text-xs font-medium text-emerald-400 uppercase mb-1">
+                      What went well
+                    </p>
+                    <p className="text-sm text-slate-300">{qf.what_went_well}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-amber-400 uppercase mb-1">
+                      What to improve
+                    </p>
+                    <p className="text-sm text-slate-300">
+                      {qf.what_to_improve}
+                    </p>
+                  </div>
+                  {qf.sample_answer_snippet && (
+                    <div className="rounded-lg bg-slate-800 p-3">
+                      <p className="text-xs font-medium text-indigo-400 uppercase mb-1">
+                        Sample stronger answer
+                      </p>
+                      <p className="text-sm text-slate-300 italic">
+                        &ldquo;{qf.sample_answer_snippet}&rdquo;
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Strengths */}
+      <div className="max-w-3xl mx-auto px-4 mt-8">
+        <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
+          <Target className="h-5 w-5 text-emerald-400" />
+          Your Strengths
+        </h2>
+        <div className="space-y-3">
+          {report.strengths.map((s, i) => (
+            <div
+              key={i}
+              className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4"
+            >
+              <p className="font-medium text-emerald-400">{s.title}</p>
+              <p className="text-sm text-slate-400 mt-1">{s.detail}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Areas to Improve */}
+      <div className="max-w-3xl mx-auto px-4 mt-8">
+        <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
+          <TrendingUp className="h-5 w-5 text-amber-400" />
+          Areas to Improve
+        </h2>
+        <div className="space-y-3">
+          {report.improvements.map((imp, i) => (
+            <div
+              key={i}
+              className="rounded-xl border border-slate-800 bg-slate-900 p-4"
+            >
+              <div className="flex items-center justify-between mb-1">
+                <p className="font-medium text-white">{imp.title}</p>
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full ${priorityBadge(imp.priority)}`}
+                >
+                  {imp.priority}
+                </span>
+              </div>
+              <p className="text-sm text-slate-400">{imp.detail}</p>
+              <div className="mt-2 flex items-start gap-2 rounded-lg bg-indigo-500/10 p-2.5">
+                <Sparkles className="h-4 w-4 text-indigo-400 mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-indigo-300">{imp.tip}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Study Plan */}
+      {report.study_plan && report.study_plan.length > 0 && (
+        <div className="max-w-3xl mx-auto px-4 mt-8">
+          <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
+            <BookOpen className="h-5 w-5 text-blue-400" />
+            Personalized Study Plan
+          </h2>
+          <div className="space-y-3">
+            {report.study_plan.map((item, i) => (
+              <div
+                key={i}
+                className="rounded-xl border border-slate-800 bg-slate-900 p-4"
+              >
+                <p className="font-medium text-white flex items-center gap-2">
+                  <ArrowRight className="h-4 w-4 text-blue-400" />
+                  {item.topic}
+                </p>
+                <p className="text-sm text-slate-400 mt-1 ml-6">
+                  {item.reason}
+                </p>
+                <p className="text-sm text-blue-300 mt-1 ml-6">
+                  {item.resources}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* STAR Method Tips */}
+      {report.star_method_tips && report.star_method_tips.length > 0 && (
+        <div className="max-w-3xl mx-auto px-4 mt-8">
+          <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
+            <Star className="h-5 w-5 text-amber-400" />
+            STAR Method Tips
+          </h2>
+          <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 space-y-2">
+            {report.star_method_tips.map((tip, i) => (
+              <p key={i} className="text-sm text-slate-300 flex items-start gap-2">
+                <span className="text-amber-400 mt-0.5">•</span>
+                {tip}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="max-w-3xl mx-auto px-4 mt-8 flex gap-3">
+        <button
+          onClick={() => router.push("/practice")}
+          className="flex-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-6 py-3 text-sm font-medium text-white transition-colors"
+        >
+          Practice Again
+        </button>
+        <a
+          href="/signup"
+          className="flex-1 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 px-6 py-3 text-sm font-medium text-slate-300 text-center transition-colors"
+        >
+          Create Free Account
+        </a>
+      </div>
+    </div>
+  );
+}
 
 export default function CandidateInterviewPage() {
   const { token } = useParams<{ token: string }>();
@@ -321,28 +648,11 @@ export default function CandidateInterviewPage() {
   if (phase === "completed") {
     if (isPractice) {
       return (
-        <div className="flex h-screen items-center justify-center bg-slate-950 p-4">
-          <div className="max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-8 text-center">
-            <CheckCircle className="mx-auto h-12 w-12 text-green-400" />
-            <h2 className="mt-4 text-xl font-bold text-white">
-              Practice Complete!
-            </h2>
-            <p className="mt-2 text-sm text-slate-400">
-              Review your answers above to identify areas for improvement.
-            </p>
-            {elapsed > 0 && (
-              <p className="mt-3 text-xs text-slate-500">
-                Duration: {formatTime(elapsed)}
-              </p>
-            )}
-            <button
-              onClick={() => router.push("/practice")}
-              className="mt-6 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-8 py-3 text-sm font-medium text-white transition-colors"
-            >
-              Try Again
-            </button>
-          </div>
-        </div>
+        <PracticeCompleteView
+          token={token}
+          elapsed={elapsed}
+          formatTime={formatTime}
+        />
       );
     }
 

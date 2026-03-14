@@ -23,6 +23,7 @@ PUBLIC_PATHS = {
 PUBLIC_PREFIXES = (
     "/api/v1/interviews/public/",
     "/api/v1/practice/",
+    "/api/v1/coach/",
     "/ws/",
 )
 

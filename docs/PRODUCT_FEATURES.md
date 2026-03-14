@@ -415,7 +415,26 @@ A free AI practice interview mode for candidates. Also serves as a lead generati
 - AI gives coaching tips after each answer
 - No report generated for employers
 - Doesn't count toward billing limits
-- Completed with "Practice Complete!" screen and "Try Again" button
+- After completing, get a full **AI Coaching Report** (see below)
+
+### AI Interview Coach
+
+**Route**: `/coach` (public landing page)
+
+After completing a practice interview, candidates can generate a comprehensive AI coaching report. The `/coach` page explains the feature and links to practice.
+
+#### Coaching Report Contents
+
+| Section | Description |
+|---------|-------------|
+| **Readiness Score** | 0–100 score with label: Needs Work, Getting There, Ready, Outstanding |
+| **Question-by-Question Feedback** | Per-question score (1–10), what went well, what to improve, sample stronger answer |
+| **Strengths** | Specific strengths identified from the transcript with evidence |
+| **Areas to Improve** | Prioritized improvements (high/medium/low) with actionable tips |
+| **Personalized Study Plan** | Topics to focus on with practice exercises based on observed weaknesses |
+| **STAR Method Tips** | Guidance on structuring behavioral answers (when applicable) |
+
+Each section references exact moments from the interview transcript.
 
 ---
 
@@ -743,12 +762,13 @@ All endpoints are prefixed with `/api/v1/`.
 |--------|----------|------|-------------|
 | POST | `/ai/ask` | JWT | Natural language search |
 
-### Practice Mode
+### Practice Mode & Coach
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/practice/templates` | None | List practice templates |
 | POST | `/practice/start` | None | Start practice session |
+| POST | `/coach/analyze/{token}` | None | Generate AI coaching report |
 
 ### Proctoring
 
