@@ -44,7 +44,7 @@ async def test_generate_link_with_scheduling(client, admin_headers, db):
     assert resp.status_code == 200
     data = resp.json()
     assert "token" in data
-    assert data.get("scheduled_at") == scheduled_at
+    assert datetime.fromisoformat(data["scheduled_at"]) == datetime.fromisoformat(scheduled_at)
 
 
 @pytest.mark.asyncio
