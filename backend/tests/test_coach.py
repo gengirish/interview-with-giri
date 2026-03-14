@@ -23,9 +23,7 @@ async def _create_practice_session(client):
 
 async def _complete_practice_session(token, db):
     """Mark session as completed and add messages."""
-    result = await db.execute(
-        select(InterviewSession).where(InterviewSession.token == token)
-    )
+    result = await db.execute(select(InterviewSession).where(InterviewSession.token == token))
     session = result.scalar_one()
 
     await db.execute(

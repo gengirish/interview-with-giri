@@ -82,13 +82,9 @@ Be encouraging but honest. The goal is to help them improve.
 Return ONLY valid JSON."""
 
 
-async def generate_coaching_report(
-    session_id: str, db: AsyncSession
-) -> dict | None:
+async def generate_coaching_report(session_id: str, db: AsyncSession) -> dict | None:
     """Generate a coaching report for a practice interview session."""
-    result = await db.execute(
-        select(InterviewSession).where(InterviewSession.id == session_id)
-    )
+    result = await db.execute(select(InterviewSession).where(InterviewSession.id == session_id))
     session = result.scalar_one_or_none()
     if not session:
         return None

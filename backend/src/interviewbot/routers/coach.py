@@ -21,9 +21,7 @@ async def analyze_practice_session(
     db: AsyncSession = Depends(get_db),
 ):
     """Generate a coaching report for a completed practice session."""
-    result = await db.execute(
-        select(InterviewSession).where(InterviewSession.token == token)
-    )
+    result = await db.execute(select(InterviewSession).where(InterviewSession.token == token))
     session = result.scalar_one_or_none()
 
     if not session:
