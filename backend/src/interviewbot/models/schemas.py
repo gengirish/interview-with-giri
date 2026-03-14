@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 import warnings
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 # --- Enums ---
 
@@ -99,6 +99,9 @@ class JobPostingCreateRequest(BaseModel):
     scoring_rubric: list[dict] | None = Field(
         None, description="Custom scoring dimensions with weights"
     )
+    decision_tree_id: UUID | None = Field(
+        None, description="Optional decision tree for dynamic branching"
+    )
 
 
 class JobPostingUpdateRequest(BaseModel):
@@ -166,6 +169,30 @@ class InterviewMessageResponse(BaseModel):
 
 
 # --- Reports ---
+
+
+class EngagementMetrics(BaseModel):
+    response_latency_ms: int | None = None
+    word_count: int = 0
+    words_per_minute: float = 0
+    hedging_score: float = 0
+    assertiveness_score: float = 0
+    elaboration_depth: int = 0
+    question_engagement: float = 0
+
+
+class EngagementSignal(BaseModel):
+    type: str
+    question_index: int
+    detail: str
+
+
+class EngagementProfile(BaseModel):
+    overall_engagement: float = 0
+    response_speed: dict = {}
+    confidence_pattern: dict = {}
+    elaboration_trend: dict = {}
+    notable_signals: list[dict] = []
 
 
 class DimensionalScore(BaseModel):
@@ -478,6 +505,50 @@ class IntegrityAssessment(BaseModel):
     details: BehaviorSummary
 
 
+# --- Job Scraping ---
+
+
+class JobScrapeRequest(BaseModel):
+    search_terms: str = Field(..., min_length=2, max_length=200)
+    location: str = Field("", max_length=200)
+    page: int = Field(1, ge=1, le=50)
+
+
+class ScrapedJobItem(BaseModel):
+    job_id: str
+    job_title: str
+    company_name: str
+    location: str
+    posted_date: str
+    job_url: str
+    snippet: str
+    job_description: str
+
+
+class JobScrapeResponse(BaseModel):
+    query: str
+    location: str
+    total_results: int
+    jobs: list[ScrapedJobItem]
+
+
+class ScrapedJobImportRequest(BaseModel):
+    jobs: list[ScrapedJobItem] = Field(..., min_length=1, max_length=50)
+    role_type: RoleType = RoleType.MIXED
+    interview_format: InterviewFormat = InterviewFormat.TEXT
+    interview_config: InterviewConfig = Field(default_factory=InterviewConfig)
+    auto_extract_skills: bool = Field(
+        False, description="Use AI to extract skills from job descriptions"
+    )
+
+
+class ScrapedJobImportResult(BaseModel):
+    total: int
+    created: int
+    errors: int
+    results: list[dict]
+
+
 # --- ATS Integration ---
 
 
@@ -513,3 +584,324 @@ class ATSPushResponse(BaseModel):
     success: bool
     platform: str
     error: str | None = None
+
+
+# --- Competency Genome ---
+
+
+class GenomeDimension(BaseModel):
+    score: float
+    confidence: float
+    evidence: str = ""
+
+
+class CompetencyGenomeResponse(BaseModel):
+    id: UUID
+    candidate_email: str
+    candidate_name: str | None = None
+    genome_data: dict = {}
+    version: int = 1
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RoleGenomeProfileCreate(BaseModel):
+    role_type: str
+    title: str
+    ideal_genome: dict = {}
+
+
+class RoleGenomeProfileResponse(BaseModel):
+    id: UUID
+    role_type: str
+    title: str
+    ideal_genome: dict = {}
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GenomeCompareRequest(BaseModel):
+    candidate_emails: list[str]
+
+
+class GenomeMatchRequest(BaseModel):
+    candidate_email: str
+
+
+# --- Co-Pilot ---
+
+
+class CopilotSuggestion(BaseModel):
+    question: str
+    targets_skill: str
+    rationale: str
+    difficulty: str
+
+
+class CopilotSessionCreate(BaseModel):
+    config: dict = Field(default_factory=dict)
+
+
+class CopilotSessionResponse(BaseModel):
+    id: UUID
+    interview_session_id: UUID
+    user_id: UUID
+    status: str
+    suggestions: list = []
+    competency_coverage: dict = {}
+    legal_alerts: list = []
+    started_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --- Decision Trees ---
+
+
+class TreeNode(BaseModel):
+    id: str
+    type: str  # "entry", "question_block", "exit"
+    config: dict = {}
+    branches: list[dict] = []
+    next: str | None = None
+
+
+class DecisionTreeCreate(BaseModel):
+    name: str
+    description: str = ""
+    role_type: str = ""
+    tree_data: dict = {}
+
+
+class DecisionTreeResponse(BaseModel):
+    id: UUID
+    name: str
+    description: str | None = None
+    role_type: str | None = None
+    tree_data: dict = {}
+    is_published: bool = False
+    usage_count: int = 0
+    created_at: datetime | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --- Training Simulator ---
+
+
+class CandidatePersona(BaseModel):
+    name: str = "Alex Chen"
+    experience_years: int = 5
+    skill_level: str = "senior"
+    personality: str = "confident"
+    hidden_strengths: list[str] = []
+    hidden_weaknesses: list[str] = []
+    background: str = ""
+
+
+class SimulationCreate(BaseModel):
+    role_type: str
+    persona: CandidatePersona | None = None
+
+
+class SimulationMessage(BaseModel):
+    content: str
+
+
+class InterviewerScorecard(BaseModel):
+    overall: float = 0
+    question_quality: dict = {}
+    competency_coverage: dict = {}
+    bias_avoidance: dict = {}
+    candidate_experience: dict = {}
+    depth_vs_breadth: dict = {}
+    time_management: dict = {}
+    tips: list[str] = []
+
+
+class SimulationResponse(BaseModel):
+    id: UUID
+    role_type: str
+    candidate_persona: dict = {}
+    messages: list = []
+    status: str = "active"
+    scorecard: dict | None = None
+    duration_seconds: int | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --- Clips ---
+
+
+class ClipResponse(BaseModel):
+    id: UUID
+    session_id: UUID
+    clip_type: str
+    title: str
+    description: str | None = None
+    message_start_index: int
+    message_end_index: int
+    transcript_excerpt: str
+    importance_score: float | None = None
+    tags: list = []
+    share_token: str | None = None
+    created_at: datetime | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ClipCollectionCreate(BaseModel):
+    title: str
+    description: str = ""
+    clip_ids: list[str] = []
+
+
+class ClipCollectionResponse(BaseModel):
+    id: UUID
+    title: str
+    description: str | None = None
+    clip_ids: list = []
+    share_token: str | None = None
+    created_at: datetime | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --- Company Values / Cultural Fit ---
+
+
+class CompanyValue(BaseModel):
+    name: str
+    definition: str = ""
+    weight: float = 0.25
+    behavioral_indicators: list[str] = []
+
+
+class CompanyValuesUpdate(BaseModel):
+    values: list[CompanyValue]
+
+
+class CompanyValuesResponse(BaseModel):
+    id: UUID
+    org_id: UUID
+    values: list = []
+    updated_at: datetime | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ValuesAssessmentResponse(BaseModel):
+    id: UUID
+    session_id: UUID
+    value_scores: dict = {}
+    overall_fit_score: float | None = None
+    fit_label: str | None = None
+    ai_narrative: str | None = None
+    created_at: datetime | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --- Predictive Hiring Success ---
+
+
+class HiringOutcomeCreate(BaseModel):
+    session_id: UUID
+    candidate_email: str
+    was_hired: bool
+    hire_date: datetime | None = None
+
+
+class HiringOutcomeUpdate(BaseModel):
+    performance_rating: float | None = None
+    retention_months: int | None = None
+    is_still_employed: bool | None = None
+    left_reason: str | None = None
+    manager_feedback: str | None = None
+
+
+class HiringOutcomeResponse(BaseModel):
+    id: UUID
+    session_id: UUID
+    candidate_email: str
+    was_hired: bool
+    performance_rating: float | None = None
+    retention_months: int | None = None
+    is_still_employed: bool | None = None
+    created_at: datetime | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PredictionResponse(BaseModel):
+    success_probability: float
+    confidence: str
+    contributing_factors: list[dict] = []
+    risk_factors: list[dict] = []
+    is_heuristic: bool = False
+
+
+class PredictionModelResponse(BaseModel):
+    id: UUID
+    model_version: int
+    training_sample_size: int | None = None
+    feature_weights: dict = {}
+    accuracy_metrics: dict = {}
+    is_active: bool = True
+    trained_at: datetime | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+# --- Knowledge Base ---
+
+
+class KnowledgeEntryResponse(BaseModel):
+    id: UUID
+    category: str
+    title: str
+    content: str
+    source_data: dict = {}
+    confidence: float | None = None
+    tags: list = []
+    created_at: datetime | None = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class KnowledgeQueryRequest(BaseModel):
+    query: str
+
+
+class KnowledgeQueryResponse(BaseModel):
+    answer: str
+    sources: list[dict] = []
+    query_id: UUID | None = None
+
+
+# --- Accessibility ---
+
+
+class AccessibilityPreferences(BaseModel):
+    extended_time: bool = False
+    time_multiplier: float = 1.0
+    screen_reader_optimized: bool = False
+    high_contrast: bool = False
+    dyslexia_friendly_font: bool = False
+    large_text: bool = False
+    reduced_motion: bool = False
+    keyboard_only_navigation: bool = False
+
+
+class AccessibilityConfig(BaseModel):
+    mode: str = "standard"  # "standard" or "accessible"
+    preferences: AccessibilityPreferences = Field(default_factory=AccessibilityPreferences)
+    accommodations_notes: str = ""
+
+
+class AccessibilityOrgSettings(BaseModel):
+    default_mode: str = "offer_choice"
+    allowed_accommodations: list[str] = Field(
+        default_factory=lambda: [
+            "extended_time",
+            "screen_reader",
+            "high_contrast",
+            "dyslexia_font",
+            "large_text",
+            "reduced_motion",
+            "keyboard_only",
+        ]
+    )
+    custom_instructions: str = ""

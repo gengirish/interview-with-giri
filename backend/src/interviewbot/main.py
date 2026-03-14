@@ -11,26 +11,35 @@ import structlog
 from interviewbot.config import get_settings
 from interviewbot.middleware.tenant import TenantMiddleware
 from interviewbot.routers import (
+    accessibility,
     ai_ask,
     analytics,
     ats,
     auth,
     billing,
+    clips,
     coach,
     code_execution,
     comments,
+    copilot,
     dashboard,
+    decision_trees,
     feedback,
+    genome,
     health,
     interviews,
     job_postings,
+    knowledge,
     organizations,
     practice,
+    predictions,
     proctoring,
     reports,
     templates,
+    training,
     uploads,
     users,
+    values,
     webhooks,
 )
 from interviewbot.utils.logger import setup_logging
@@ -111,6 +120,7 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=500, content={"detail": detail})
 
     app.include_router(health.router, prefix="/api/v1")
+    app.include_router(accessibility.router, prefix="/api/v1")
     app.include_router(auth.router, prefix="/api/v1")
     app.include_router(uploads.router, prefix="/api/v1")
     app.include_router(job_postings.router, prefix="/api/v1")
@@ -119,6 +129,10 @@ def create_app() -> FastAPI:
     app.include_router(dashboard.router, prefix="/api/v1")
     app.include_router(code_execution.router, prefix="/api/v1")
     app.include_router(reports.router, prefix="/api/v1")
+    app.include_router(clips.router, prefix="/api/v1")
+    app.include_router(clips.collections_router, prefix="/api/v1")
+    app.include_router(genome.router, prefix="/api/v1")
+    app.include_router(copilot.router, prefix="/api/v1")
     app.include_router(comments.router, prefix="/api/v1")
     app.include_router(analytics.router, prefix="/api/v1")
     app.include_router(ai_ask.router, prefix="/api/v1")
@@ -131,6 +145,11 @@ def create_app() -> FastAPI:
     app.include_router(webhooks.router, prefix="/api/v1")
     app.include_router(ats.router, prefix="/api/v1")
     app.include_router(organizations.router, prefix="/api/v1")
+    app.include_router(decision_trees.router, prefix="/api/v1")
+    app.include_router(training.router, prefix="/api/v1")
+    app.include_router(values.router, prefix="/api/v1")
+    app.include_router(predictions.router, prefix="/api/v1")
+    app.include_router(knowledge.router, prefix="/api/v1")
 
     @app.websocket("/ws/interview/{token}")
     async def websocket_interview(websocket: WebSocket, token: str) -> None:

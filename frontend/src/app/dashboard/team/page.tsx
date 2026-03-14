@@ -55,7 +55,7 @@ export default function TeamPage() {
   async function loadUsers() {
     try {
       const data = await api.getUsers();
-      setUsers(data);
+      setUsers(data.items);
     } catch {
       toast.error("Failed to load team members");
     } finally {

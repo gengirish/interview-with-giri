@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, type AccessibilityConfig } from "@/lib/api";
 import {
   Send,
   Loader2,
@@ -391,6 +391,25 @@ function InterviewContent() {
   const [relevanceRating, setRelevanceRating] = useState(0);
   const [feedbackComment, setFeedbackComment] = useState("");
 
+  const [showAccessibilityModal, setShowAccessibilityModal] = useState(false);
+  const [accessibilityPrefs, setAccessibilityPrefs] = useState<AccessibilityConfig>({
+    mode: "standard",
+    preferences: {
+      extended_time: false,
+      time_multiplier: 1.5,
+      screen_reader_optimized: false,
+      high_contrast: false,
+      dyslexia_friendly_font: false,
+      large_text: false,
+      reduced_motion: false,
+      keyboard_only_navigation: false,
+    },
+    accommodations_notes: "",
+  });
+  const [cssOverrides, setCssOverrides] = useState<Record<string, string> | null>(null);
+  const [accessibilityApplying, setAccessibilityApplying] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
   const wsRef = useRef<WebSocket | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -450,6 +469,28 @@ function InterviewContent() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, thinking]);
+
+  useEffect(() => {
+    const overrides = cssOverrides;
+    if (overrides && Object.keys(overrides).length > 0) {
+      Object.entries(overrides).forEach(([key, value]) => {
+        document.documentElement.style.setProperty(key, value);
+      });
+    }
+    return () => {
+      if (overrides) {
+        Object.keys(overrides).forEach((key) => {
+          document.documentElement.style.removeProperty(key);
+        });
+      }
+    };
+  }, [cssOverrides]);
+
+  useEffect(() => {
+    if (phase === "interview" && messages.length > 0 && !thinking) {
+      inputRef.current?.focus();
+    }
+  }, [phase, messages, thinking]);
 
   useEffect(() => {
     if (phase === "consent" || phase === "interview") {
@@ -587,9 +628,40 @@ function InterviewContent() {
   }, [token]);
 
   function startInterview() {
+    setShowAccessibilityModal(false);
     setPhase("interview");
     interviewActiveRef.current = true;
     connectWebSocket();
+  }
+
+  async function handleApplyAccessibility() {
+    if (!token) return;
+    setAccessibilityApplying(true);
+    try {
+      await api.updateAccessibilityConfig(token, {
+        ...accessibilityPrefs,
+        mode: accessibilityPrefs.preferences.extended_time ||
+          accessibilityPrefs.preferences.screen_reader_optimized ||
+          accessibilityPrefs.preferences.high_contrast ||
+          accessibilityPrefs.preferences.dyslexia_friendly_font ||
+          accessibilityPrefs.preferences.large_text ||
+          accessibilityPrefs.preferences.reduced_motion ||
+          accessibilityPrefs.preferences.keyboard_only_navigation
+          ? "accessible"
+          : "standard",
+      });
+      const overrides = await api.getAccessibilityCssOverrides(token);
+      setCssOverrides(overrides);
+      startInterview();
+    } catch {
+      setError("Failed to apply accessibility settings.");
+    } finally {
+      setAccessibilityApplying(false);
+    }
+  }
+
+  function handleSkipAccessibility() {
+    startInterview();
   }
 
   useEffect(() => {
@@ -943,27 +1015,252 @@ function InterviewContent() {
 
   if (phase === "ready") {
     return (
-      <div className="flex h-screen items-center justify-center bg-slate-950 p-4">
-        <div className="max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-8 text-center">
-          <MessageSquare className="mx-auto h-12 w-12 text-indigo-400" />
-          <h2 className="mt-4 text-xl font-bold text-white">Ready to Begin</h2>
-          <p className="mt-2 text-sm text-slate-400">
-            Click start when you&apos;re ready. The AI interviewer will ask you
-            {" "}{total} questions about the role.
-          </p>
-          <button
-            onClick={startInterview}
-            className="mt-6 rounded-lg bg-indigo-600 px-8 py-3 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
-          >
-            Start Interview
-          </button>
+      <>
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-lg focus:bg-indigo-600 focus:px-4 focus:py-2 focus:text-white focus:outline-none focus:ring-2 focus:ring-white"
+        >
+          Skip to main content
+        </a>
+        <div className="flex h-screen items-center justify-center bg-slate-950 p-4">
+          <div className="max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-8 text-center">
+            <MessageSquare className="mx-auto h-12 w-12 text-indigo-400" />
+            <h2 className="mt-4 text-xl font-bold text-white">Ready to Begin</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Click start when you&apos;re ready. The AI interviewer will ask you
+              {" "}{total} questions about the role.
+            </p>
+            <button
+              onClick={() => setShowAccessibilityModal(true)}
+              className="mt-6 rounded-lg bg-indigo-600 px-8 py-3 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+              aria-label="Start interview"
+            >
+              Start Interview
+            </button>
+          </div>
         </div>
-      </div>
+
+        {showAccessibilityModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="accessibility-modal-title"
+            aria-describedby="accessibility-modal-desc"
+          >
+            <div
+              className="absolute inset-0"
+              onClick={() => setShowAccessibilityModal(false)}
+              aria-hidden="true"
+            />
+            <div
+              className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-xl"
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setShowAccessibilityModal(false);
+              }}
+            >
+              <h2 id="accessibility-modal-title" className="text-xl font-bold text-white">
+                Accessibility Options
+              </h2>
+              <p id="accessibility-modal-desc" className="mt-2 text-sm text-slate-400">
+                We want to ensure a comfortable interview experience for everyone.
+              </p>
+
+              <div className="mt-6 space-y-4">
+                <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 p-3 hover:bg-slate-800/50">
+                  <span className="text-sm text-slate-300">Extended time</span>
+                  <input
+                    type="checkbox"
+                    checked={accessibilityPrefs.preferences.extended_time}
+                    onChange={(e) =>
+                      setAccessibilityPrefs((p) => ({
+                        ...p,
+                        preferences: {
+                          ...p.preferences,
+                          extended_time: e.target.checked,
+                        },
+                      }))
+                    }
+                    className="h-4 w-4 rounded border-slate-600 text-indigo-600 focus:ring-indigo-500"
+                    aria-label="Enable extended time"
+                  />
+                </label>
+                {accessibilityPrefs.preferences.extended_time && (
+                  <div className="ml-4">
+                    <label className="block text-xs text-slate-400 mb-1">
+                      Time multiplier: {accessibilityPrefs.preferences.time_multiplier}x
+                    </label>
+                    <input
+                      type="range"
+                      min={1.5}
+                      max={2}
+                      step={0.5}
+                      value={accessibilityPrefs.preferences.time_multiplier}
+                      onChange={(e) =>
+                        setAccessibilityPrefs((p) => ({
+                          ...p,
+                          preferences: {
+                            ...p.preferences,
+                            time_multiplier: parseFloat(e.target.value),
+                          },
+                        }))
+                      }
+                      className="w-full"
+                      aria-label="Time multiplier"
+                    />
+                  </div>
+                )}
+                <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 p-3 hover:bg-slate-800/50">
+                  <span className="text-sm text-slate-300">Screen reader optimized</span>
+                  <input
+                    type="checkbox"
+                    checked={accessibilityPrefs.preferences.screen_reader_optimized}
+                    onChange={(e) =>
+                      setAccessibilityPrefs((p) => ({
+                        ...p,
+                        preferences: {
+                          ...p.preferences,
+                          screen_reader_optimized: e.target.checked,
+                        },
+                      }))
+                    }
+                    className="h-4 w-4 rounded border-slate-600 text-indigo-600 focus:ring-indigo-500"
+                    aria-label="Screen reader optimized"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 p-3 hover:bg-slate-800/50">
+                  <span className="text-sm text-slate-300">High contrast mode</span>
+                  <input
+                    type="checkbox"
+                    checked={accessibilityPrefs.preferences.high_contrast}
+                    onChange={(e) =>
+                      setAccessibilityPrefs((p) => ({
+                        ...p,
+                        preferences: {
+                          ...p.preferences,
+                          high_contrast: e.target.checked,
+                        },
+                      }))
+                    }
+                    className="h-4 w-4 rounded border-slate-600 text-indigo-600 focus:ring-indigo-500"
+                    aria-label="High contrast mode"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 p-3 hover:bg-slate-800/50">
+                  <span className="text-sm text-slate-300">Dyslexia-friendly font</span>
+                  <input
+                    type="checkbox"
+                    checked={accessibilityPrefs.preferences.dyslexia_friendly_font}
+                    onChange={(e) =>
+                      setAccessibilityPrefs((p) => ({
+                        ...p,
+                        preferences: {
+                          ...p.preferences,
+                          dyslexia_friendly_font: e.target.checked,
+                        },
+                      }))
+                    }
+                    className="h-4 w-4 rounded border-slate-600 text-indigo-600 focus:ring-indigo-500"
+                    aria-label="Dyslexia-friendly font"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 p-3 hover:bg-slate-800/50">
+                  <span className="text-sm text-slate-300">Large text</span>
+                  <input
+                    type="checkbox"
+                    checked={accessibilityPrefs.preferences.large_text}
+                    onChange={(e) =>
+                      setAccessibilityPrefs((p) => ({
+                        ...p,
+                        preferences: {
+                          ...p.preferences,
+                          large_text: e.target.checked,
+                        },
+                      }))
+                    }
+                    className="h-4 w-4 rounded border-slate-600 text-indigo-600 focus:ring-indigo-500"
+                    aria-label="Large text"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 p-3 hover:bg-slate-800/50">
+                  <span className="text-sm text-slate-300">Reduced motion</span>
+                  <input
+                    type="checkbox"
+                    checked={accessibilityPrefs.preferences.reduced_motion}
+                    onChange={(e) =>
+                      setAccessibilityPrefs((p) => ({
+                        ...p,
+                        preferences: {
+                          ...p.preferences,
+                          reduced_motion: e.target.checked,
+                        },
+                      }))
+                    }
+                    className="h-4 w-4 rounded border-slate-600 text-indigo-600 focus:ring-indigo-500"
+                    aria-label="Reduced motion"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-700 p-3 hover:bg-slate-800/50">
+                  <span className="text-sm text-slate-300">Keyboard-only navigation</span>
+                  <input
+                    type="checkbox"
+                    checked={accessibilityPrefs.preferences.keyboard_only_navigation}
+                    onChange={(e) =>
+                      setAccessibilityPrefs((p) => ({
+                        ...p,
+                        preferences: {
+                          ...p.preferences,
+                          keyboard_only_navigation: e.target.checked,
+                        },
+                      }))
+                    }
+                    className="h-4 w-4 rounded border-slate-600 text-indigo-600 focus:ring-indigo-500"
+                    aria-label="Keyboard-only navigation"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-6 flex flex-col gap-3">
+                <button
+                  onClick={handleApplyAccessibility}
+                  disabled={accessibilityApplying}
+                  className="w-full rounded-lg py-2.5 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                  style={{ backgroundColor: primaryColor }}
+                  aria-label="Apply accessibility settings and start interview"
+                >
+                  {accessibilityApplying ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Applying...
+                    </span>
+                  ) : (
+                    "Apply & Start"
+                  )}
+                </button>
+                <button
+                  onClick={handleSkipAccessibility}
+                  disabled={accessibilityApplying}
+                  className="w-full rounded-lg border border-slate-600 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800 transition-colors disabled:opacity-50"
+                  aria-label="I don't need accommodations, start interview"
+                >
+                  I don&apos;t need accommodations
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 
   return (
     <div className="flex h-screen flex-col bg-slate-950">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded-lg focus:bg-indigo-600 focus:px-4 focus:py-2 focus:text-white focus:outline-none focus:ring-2 focus:ring-white"
+      >
+        Skip to main content
+      </a>
       {reconnecting && (
         <div className="bg-amber-600/90 text-white text-center py-2 text-sm font-medium">
           Reconnecting...
@@ -1021,8 +1318,19 @@ function InterviewContent() {
       </div>
 
       {/* Messages */}
-      <div data-tour="chat-interface" className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-        <div className="max-w-3xl mx-auto space-y-4">
+      <main
+        id="main-content"
+        role="main"
+        data-tour="chat-interface"
+        className="flex-1 overflow-y-auto px-4 py-6 space-y-4"
+        aria-label="Interview chat"
+      >
+        <div
+          className="max-w-3xl mx-auto space-y-4"
+          role="log"
+          aria-live="polite"
+          aria-label="Interview messages"
+        >
           {messages.map((msg, i) => (
             <div
               key={i}
@@ -1062,7 +1370,7 @@ function InterviewContent() {
           )}
           <div ref={chatEndRef} />
         </div>
-      </div>
+      </main>
 
       {/* Input */}
       <div className="border-t border-slate-800 px-4 py-4">
@@ -1071,6 +1379,7 @@ function InterviewContent() {
           className="max-w-3xl mx-auto flex items-center gap-3"
         >
           <input
+            ref={inputRef}
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -1078,6 +1387,7 @@ function InterviewContent() {
             placeholder={thinking ? "Waiting for response..." : "Type your answer..."}
             className="flex-1 rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none disabled:opacity-50"
             autoFocus
+            aria-label="Type your answer"
           />
           <button
             type="submit"

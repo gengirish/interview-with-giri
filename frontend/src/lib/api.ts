@@ -128,6 +128,7 @@ export interface JobPosting {
   interview_config: Record<string, unknown>;
   scoring_rubric?: ScoringRubricDimension[] | null;
   is_active: boolean;
+  decision_tree_id?: string | null;
   created_at: string;
   interview_link?: string;
 }
@@ -259,6 +260,43 @@ export interface CodeExecutionResult {
   exit_code: number | null;
 }
 
+export interface ScrapedJob {
+  job_id: string;
+  job_title: string;
+  company_name: string;
+  location: string;
+  posted_date: string;
+  job_url: string;
+  snippet: string;
+  job_description: string;
+}
+
+export interface CopilotSuggestion {
+  question: string;
+  targets_skill: string;
+  rationale: string;
+  difficulty: string;
+}
+
+export interface LegalAlert {
+  question: string;
+  is_risky: boolean;
+  risk_type?: string;
+  severity?: string;
+  suggestion?: string;
+}
+
+export interface CopilotSession {
+  id: string;
+  interview_session_id: string;
+  user_id: string;
+  status: string;
+  suggestions: CopilotSuggestion[];
+  competency_coverage: Record<string, { covered: boolean; depth: number }>;
+  legal_alerts: LegalAlert[];
+  started_at: string;
+}
+
 export interface OrgUser {
   id: string;
   email: string;
@@ -266,6 +304,103 @@ export interface OrgUser {
   role: string;
   is_active: boolean;
   created_at: string;
+}
+
+export interface DecisionTree {
+  id: string;
+  name: string;
+  description: string | null;
+  role_type: string | null;
+  tree_data: Record<string, unknown>;
+  is_published: boolean;
+  usage_count: number;
+  created_at: string | null;
+}
+
+export interface CompetencyGenome {
+  id: string;
+  candidate_email: string;
+  candidate_name: string | null;
+  genome_data: {
+    dimensions?: Record<
+      string,
+      { score: number; confidence?: number; sources?: Array<{ session_id: string; score: number }> }
+    >;
+    interview_count?: number;
+  };
+  version: number;
+}
+
+export interface RoleGenomeProfile {
+  id: string;
+  role_type: string;
+  title: string;
+  ideal_genome: Record<
+    string,
+    { ideal?: number; min?: number; weight?: number }
+  >;
+}
+
+export interface Clip {
+  id: string;
+  session_id: string;
+  clip_type: string;
+  title: string;
+  description: string | null;
+  message_start_index: number;
+  message_end_index: number;
+  transcript_excerpt: string;
+  importance_score: number | null;
+  tags: string[];
+  share_token: string | null;
+  created_at: string | null;
+}
+
+export interface ClipCollection {
+  id: string;
+  title: string;
+  description: string | null;
+  clip_ids: string[];
+  share_token: string | null;
+  created_at: string | null;
+}
+
+export interface ClipCollectionWithClips extends ClipCollection {
+  clips: Clip[];
+}
+
+export interface KnowledgeEntry {
+  id: string;
+  category: string;
+  title: string;
+  content: string;
+  source_data: Record<string, unknown>;
+  confidence: number | null;
+  tags: string[];
+  created_at: string | null;
+}
+
+export interface AccessibilityPreferences {
+  extended_time: boolean;
+  time_multiplier: number;
+  screen_reader_optimized: boolean;
+  high_contrast: boolean;
+  dyslexia_friendly_font: boolean;
+  large_text: boolean;
+  reduced_motion: boolean;
+  keyboard_only_navigation: boolean;
+}
+
+export interface AccessibilityConfig {
+  mode: string;
+  preferences: AccessibilityPreferences;
+  accommodations_notes: string;
+}
+
+export interface AccessibilityOrgSettings {
+  default_mode: string;
+  allowed_accommodations: string[];
+  custom_instructions: string;
 }
 
 // --- API Client ---
@@ -379,6 +514,86 @@ export const api = {
       suggested_questions: string[];
     }>(`/api/v1/job-postings/${id}/extract-skills`, { method: "POST" }),
 
+  scrapeJobs: (data: { search_terms: string; location?: string; page?: number }) =>
+    request<{
+      query: string;
+      location: string;
+      total_results: number;
+      jobs: ScrapedJob[];
+    }>("/api/v1/job-postings/scrape", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  importScrapedJobs: (data: {
+    jobs: ScrapedJob[];
+    role_type?: string;
+    interview_format?: string;
+    interview_config?: Record<string, unknown>;
+    auto_extract_skills?: boolean;
+  }) =>
+    request<{
+      total: number;
+      created: number;
+      errors: number;
+      results: Array<{ index: number; title: string; status: string; error?: string; extracted_skills?: string[] }>;
+    }>("/api/v1/job-postings/scrape/import", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  // Decision Trees
+  listDecisionTrees: () =>
+    request<DecisionTree[]>("/api/v1/decision-trees"),
+  createDecisionTree: (data: {
+    name: string;
+    description?: string;
+    role_type?: string;
+    tree_data?: Record<string, unknown>;
+  }) =>
+    request<DecisionTree>("/api/v1/decision-trees", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getDecisionTree: (id: string) =>
+    request<DecisionTree>(`/api/v1/decision-trees/${id}`),
+  updateDecisionTree: (
+    id: string,
+    data: {
+      name?: string;
+      description?: string;
+      role_type?: string;
+      tree_data?: Record<string, unknown>;
+    },
+  ) =>
+    request<DecisionTree>(`/api/v1/decision-trees/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteDecisionTree: (id: string) =>
+    request<void>(`/api/v1/decision-trees/${id}`, { method: "DELETE" }),
+  publishDecisionTree: (id: string) =>
+    request<DecisionTree>(`/api/v1/decision-trees/${id}/publish`, {
+      method: "POST",
+    }),
+  duplicateDecisionTree: (id: string) =>
+    request<DecisionTree>(`/api/v1/decision-trees/${id}/duplicate`, {
+      method: "POST",
+    }),
+  validateDecisionTree: (data: { tree_data: Record<string, unknown> }) =>
+    request<{ valid: boolean; errors: string[] }>(
+      "/api/v1/decision-trees/validate",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+    ),
+  getTreeAnalytics: (id: string) =>
+    request<{
+      paths: Array<{ path: string; count: number; percentage: number }>;
+      total_sessions: number;
+    }>(`/api/v1/decision-trees/${id}/analytics`),
+
   // Templates
   getTemplates: () =>
     request<
@@ -434,6 +649,21 @@ export const api = {
     }),
   getReport: (sessionId: string) =>
     request<CandidateReport>(`/api/v1/reports/${sessionId}`),
+  getEngagementProfile: (reportId: string) =>
+    request<{
+      engagement_profile: {
+        overall_engagement: number;
+        response_speed: {
+          avg_ms: number;
+          trend: string;
+          consistency: number;
+          per_question?: { q: number; ms: number }[];
+        };
+        confidence_pattern: { avg: number; arc: { q: number; v: number }[] };
+        elaboration_trend: { avg_depth: number; trend: string };
+        notable_signals: { type: string; question_index: number; detail: string }[];
+      };
+    }>(`/api/v1/reports/${reportId}/engagement`),
   getHighlights: (sessionId: string) =>
     request<{
       highlights: Array<{
@@ -502,6 +732,48 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ session_ids: sessionIds }),
     }),
+
+  // Clips
+  getSessionClips: (sessionId: string) =>
+    request<Clip[]>(`/api/v1/clips/session/${sessionId}`),
+  generateClips: (sessionId: string) =>
+    request<Clip[]>(`/api/v1/clips/generate/${sessionId}`, { method: "POST" }),
+  getClip: (clipId: string) =>
+    request<Clip>(`/api/v1/clips/${clipId}`),
+  deleteClip: (clipId: string) =>
+    request<void>(`/api/v1/clips/${clipId}`, { method: "DELETE" }),
+  shareClip: (clipId: string, hours?: number) =>
+    request<{ share_url: string; share_token: string; expires_at: string }>(
+      `/api/v1/clips/${clipId}/share?hours=${hours ?? 72}`,
+      { method: "POST" },
+    ),
+  getPublicClip: (token: string) =>
+    request<Clip>(`/api/v1/clips/public/${token}`),
+  listClips: (filters?: { type?: string; date_from?: string; date_to?: string; q?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.type) params.set("type", filters.type);
+    if (filters?.date_from) params.set("date_from", filters.date_from);
+    if (filters?.date_to) params.set("date_to", filters.date_to);
+    if (filters?.q) params.set("q", filters.q);
+    const qs = params.toString();
+    return request<Clip[]>(`/api/v1/clips${qs ? `?${qs}` : ""}`);
+  },
+  createClipCollection: (data: { title: string; description?: string; clip_ids?: string[] }) =>
+    request<ClipCollection>(`/api/v1/clip-collections`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  listClipCollections: () =>
+    request<ClipCollection[]>(`/api/v1/clip-collections`),
+  getClipCollection: (id: string) =>
+    request<ClipCollectionWithClips>(`/api/v1/clip-collections/${id}`),
+  shareClipCollection: (id: string, hours?: number) =>
+    request<{ share_url: string; share_token: string; expires_at: string }>(
+      `/api/v1/clip-collections/${id}/share?hours=${hours ?? 72}`,
+      { method: "POST" },
+    ),
+  getPublicClipCollection: (token: string) =>
+    request<ClipCollectionWithClips>(`/api/v1/clip-collections/public/${token}`),
 
   exportReportCSVBlob: async (sessionId: string): Promise<Blob> => {
     const token =
@@ -799,7 +1071,7 @@ export const api = {
     ),
 
   // User Management
-  getUsers: () => request<OrgUser[]>("/api/v1/users"),
+  getUsers: () => request<PaginatedResponse<OrgUser>>("/api/v1/users"),
   getOrgMembersForMentions: () =>
     request<
       Array<{ id: string; email: string; full_name: string }>
@@ -856,6 +1128,427 @@ export const api = {
         body: JSON.stringify(data),
       },
     ),
+
+  // Co-Pilot
+  startCopilot: (sessionId: string) =>
+    request<CopilotSession>(`/api/v1/copilot/start/${sessionId}`, {
+      method: "POST",
+    }),
+  getCopilot: (copilotId: string) =>
+    request<CopilotSession>(`/api/v1/copilot/${copilotId}`),
+  getCopilotCoverage: (copilotId: string) =>
+    request<{ coverage: Record<string, { covered: boolean; depth: number }> }>(
+      `/api/v1/copilot/${copilotId}/coverage`
+    ),
+  getCopilotSuggestions: (copilotId: string) =>
+    request<{
+      suggestions: CopilotSuggestion[];
+      uncovered_skills: string[];
+    }>(`/api/v1/copilot/${copilotId}/suggest`, {
+      method: "POST",
+    }),
+  checkLegalRisk: (copilotId: string, text: string) =>
+    request<{
+      is_risky: boolean;
+      risk_type?: string;
+      severity?: string;
+      suggestion?: string;
+    }>(`/api/v1/copilot/${copilotId}/check-legal`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+  endCopilot: (copilotId: string) =>
+    request<{ status: string }>(`/api/v1/copilot/${copilotId}/end`, {
+      method: "POST",
+    }),
+  getCopilotHistory: () =>
+    request<CopilotSession[]>("/api/v1/copilot/history/list"),
+
+  // Genome
+  getGenome: (email: string) =>
+    request<CompetencyGenome>(`/api/v1/genome/candidate/${encodeURIComponent(email)}`),
+  listGenomes: (q?: string) =>
+    request<{ items: CompetencyGenome[]; total: number }>(
+      `/api/v1/genome/candidates${q ? `?q=${encodeURIComponent(q)}` : ""}`
+    ),
+  compareGenomes: (emails: string[]) =>
+    request<{
+      candidates: Array<{ email: string; name: string | null; genome_data: Record<string, unknown> }>;
+    }>("/api/v1/genome/compare", {
+      method: "POST",
+      body: JSON.stringify({ candidate_emails: emails }),
+    }),
+  matchGenome: (jobId: string, email: string) =>
+    request<{
+      job_id: string;
+      job_title: string;
+      candidate_email: string;
+      role_profile: string;
+      match_percentage: number;
+      gaps: Array<{ dimension: string; actual: number | null; required: number }>;
+      overqualified: string[];
+    }>(`/api/v1/genome/match/${jobId}`, {
+      method: "POST",
+      body: JSON.stringify({ candidate_email: email }),
+    }),
+  listRoleProfiles: () =>
+    request<{ items: RoleGenomeProfile[] }>("/api/v1/genome/role-profiles"),
+  createRoleProfile: (data: {
+    role_type: string;
+    title: string;
+    ideal_genome?: Record<string, { ideal?: number; min?: number; weight?: number }>;
+  }) =>
+    request<RoleGenomeProfile>("/api/v1/genome/role-profiles", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteRoleProfile: (id: string) =>
+    request<{ status: string }>(`/api/v1/genome/role-profiles/${id}`, {
+      method: "DELETE",
+    }),
+  rebuildGenome: (email: string) =>
+    request<CompetencyGenome>(`/api/v1/genome/rebuild/${encodeURIComponent(email)}`, {
+      method: "POST",
+    }),
+
+  // Knowledge Base
+  queryKnowledge: (query: string) =>
+    request<{ answer: string; sources: Array<{ id: string; title: string; category: string }>; query_id: string | null }>(
+      "/api/v1/knowledge/query",
+      {
+        method: "POST",
+        body: JSON.stringify({ query }),
+      }
+    ),
+  listKnowledgeEntries: (category?: string) => {
+    const params = category ? `?category=${encodeURIComponent(category)}` : "";
+    return request<{ items: KnowledgeEntry[]; total: number }>(
+      `/api/v1/knowledge/entries${params}`
+    );
+  },
+  getKnowledgeEntry: (id: string) =>
+    request<KnowledgeEntry>(`/api/v1/knowledge/entries/${id}`),
+  generateKnowledge: () =>
+    request<{ status: string; entries_created: number }>(
+      "/api/v1/knowledge/generate",
+      { method: "POST" }
+    ),
+  getKnowledgeSuggestions: () =>
+    request<{
+      suggestions: Array<{ title: string; detail: string; type: string }>;
+    }>("/api/v1/knowledge/suggestions"),
+  rateQuery: (queryId: string, rating: number) =>
+    request<{ status: string; rating: number }>(
+      `/api/v1/knowledge/query/${queryId}/rate`,
+      {
+        method: "POST",
+        body: JSON.stringify({ rating }),
+      }
+    ),
+  getPopularQueries: () =>
+    request<{ queries: Array<{ query: string; count: number }> }>(
+      "/api/v1/knowledge/popular-queries"
+    ),
+
+  // Company Values / Cultural Fit
+  getCompanyValues: () =>
+    request<{
+      id: string;
+      org_id: string;
+      values: Array<{
+        name: string;
+        definition: string;
+        weight: number;
+        behavioral_indicators: string[];
+      }>;
+      updated_at: string | null;
+    } | null>("/api/v1/values"),
+  updateCompanyValues: (values: Array<{
+    name: string;
+    definition?: string;
+    weight?: number;
+    behavioral_indicators?: string[];
+  }>) =>
+    request<{
+      id: string;
+      org_id: string;
+      values: typeof values;
+      updated_at: string | null;
+    }>("/api/v1/values", {
+      method: "PUT",
+      body: JSON.stringify({ values }),
+    }),
+  generateValueQuestions: () =>
+    request<{ questions: Record<string, Array<{ question: string; probes?: string[] }>> }>(
+      "/api/v1/values/generate-questions",
+      { method: "POST" }
+    ),
+  assessValues: (sessionId: string) =>
+    request<{
+      id: string;
+      session_id: string;
+      value_scores: Record<string, { score: number; confidence?: number; evidence?: string[] }>;
+      overall_fit_score: number | null;
+      fit_label: string | null;
+      ai_narrative: string | null;
+      created_at: string | null;
+    }>("/api/v1/values/assess/" + sessionId, { method: "POST" }),
+  getValuesAssessment: (sessionId: string) =>
+    request<{
+      id: string;
+      session_id: string;
+      value_scores: Record<string, { score: number; confidence?: number; evidence?: string[] }>;
+      overall_fit_score: number | null;
+      fit_label: string | null;
+      ai_narrative: string | null;
+      created_at: string | null;
+    }>(`/api/v1/values/assessment/${sessionId}`),
+  getValuesTrends: () =>
+    request<{
+      avg_value_scores: Record<string, number>;
+      overall_avg_fit: number | null;
+      assessment_count: number;
+    }>("/api/v1/values/org-trends"),
+
+  // Training Simulator
+  startTraining: (data: { role_type: string; persona?: Record<string, unknown> }) =>
+    request<{
+      id: string;
+      role_type: string;
+      candidate_persona: Record<string, unknown>;
+      messages: Array<{ role: string; content: string }>;
+      status: string;
+      started_at: string;
+    }>("/api/v1/training/start", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  sendTrainingMessage: (id: string, content: string) =>
+    request<{ response: string }>(`/api/v1/training/${id}/message`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    }),
+  endTraining: (id: string) =>
+    request<{
+      id: string;
+      status: string;
+      scorecard: Record<string, unknown>;
+      duration_seconds: number | null;
+      completed_at: string | null;
+    }>(`/api/v1/training/${id}/end`, {
+      method: "POST",
+    }),
+  getTraining: (id: string) =>
+    request<{
+      id: string;
+      role_type: string;
+      candidate_persona: Record<string, unknown>;
+      messages: Array<{ role: string; content: string }>;
+      status: string;
+      scorecard: Record<string, unknown> | null;
+      duration_seconds: number | null;
+      started_at: string | null;
+      completed_at: string | null;
+    }>(`/api/v1/training/${id}`),
+  getTrainingHistory: () =>
+    request<
+      Array<{
+        id: string;
+        role_type: string;
+        status: string;
+        scorecard: { overall?: number } | null;
+        duration_seconds: number | null;
+        started_at: string | null;
+        completed_at: string | null;
+      }>
+    >("/api/v1/training/history"),
+  getTrainingLeaderboard: () =>
+    request<
+      Array<{
+        user_id: string;
+        full_name: string;
+        email: string;
+        avg_score: number;
+        simulations_count: number;
+      }>
+    >("/api/v1/training/leaderboard"),
+  getTrainingPersonas: () =>
+    request<
+      Array<{
+        name: string;
+        experience_years: number;
+        skill_level: string;
+        personality: string;
+        hidden_strengths: string[];
+        hidden_weaknesses: string[];
+        background: string;
+      }>
+    >("/api/v1/training/personas"),
+  getRandomPersona: () =>
+    request<{
+      name: string;
+      experience_years: number;
+      skill_level: string;
+      personality: string;
+      hidden_strengths: string[];
+      hidden_weaknesses: string[];
+      background: string;
+    }>("/api/v1/training/personas/random", { method: "POST" }),
+
+  // Predictions / Hiring Success
+  recordOutcome: (data: {
+    session_id: string;
+    candidate_email: string;
+    was_hired: boolean;
+    hire_date?: string;
+  }) =>
+    request<{
+      id: string;
+      session_id: string;
+      candidate_email: string;
+      was_hired: boolean;
+      performance_rating: number | null;
+      retention_months: number | null;
+      is_still_employed: boolean | null;
+      created_at: string | null;
+    }>("/api/v1/predictions/outcomes", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateOutcome: (
+    sessionId: string,
+    data: {
+      performance_rating?: number;
+      retention_months?: number;
+      is_still_employed?: boolean;
+      left_reason?: string;
+      manager_feedback?: string;
+    }
+  ) =>
+    request<{
+      id: string;
+      session_id: string;
+      candidate_email: string;
+      was_hired: boolean;
+      performance_rating: number | null;
+      retention_months: number | null;
+      is_still_employed: boolean | null;
+      created_at: string | null;
+    }>(`/api/v1/predictions/outcomes/${sessionId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  getOutcomeBySession: (sessionId: string) =>
+    request<{
+      id: string;
+      session_id: string;
+      candidate_email: string;
+      was_hired: boolean;
+      performance_rating: number | null;
+      retention_months: number | null;
+      is_still_employed: boolean | null;
+      created_at: string | null;
+    } | null>(`/api/v1/predictions/outcomes/by-session/${sessionId}`),
+  listOutcomes: (page?: number, perPage?: number) =>
+    request<{
+      items: Array<{
+        id: string;
+        session_id: string;
+        candidate_email: string;
+        was_hired: boolean;
+        performance_rating: number | null;
+        retention_months: number | null;
+        is_still_employed: boolean | null;
+        created_at: string | null;
+      }>;
+      total: number;
+      page: number;
+      per_page: number;
+    }>(`/api/v1/predictions/outcomes?page=${page ?? 1}&per_page=${perPage ?? 20}`),
+  trainModel: () =>
+    request<{
+      id: string;
+      model_version: number;
+      training_sample_size: number | null;
+      feature_weights: Record<string, number>;
+      accuracy_metrics: Record<string, number>;
+      is_active: boolean;
+      trained_at: string | null;
+    }>("/api/v1/predictions/train", { method: "POST" }),
+  getPredictionStatus: () =>
+    request<{
+      model: {
+        id: string;
+        model_version: number;
+        training_sample_size: number | null;
+        feature_weights: Record<string, number>;
+        accuracy_metrics: Record<string, number>;
+        is_active: boolean;
+        trained_at: string | null;
+      } | null;
+      trainable_outcomes: number;
+      outcomes_needed: number;
+    }>("/api/v1/predictions/status"),
+  getModel: () =>
+    request<{
+      id: string;
+      model_version: number;
+      training_sample_size: number | null;
+      feature_weights: Record<string, number>;
+      accuracy_metrics: Record<string, number>;
+      is_active: boolean;
+      trained_at: string | null;
+    } | null>("/api/v1/predictions/model"),
+  getPrediction: (sessionId: string) =>
+    request<{
+      success_probability: number;
+      confidence: string;
+      contributing_factors: Array<{ factor: string; value?: number; impact: string }>;
+      risk_factors: Array<{ factor: string; value?: number; impact: string }>;
+      is_heuristic: boolean;
+    }>(`/api/v1/predictions/predict/${sessionId}`),
+  getInsights: () =>
+    request<{
+      feature_importance: Array<{ factor: string; weight: number; impact: string }>;
+      message?: string;
+    }>("/api/v1/predictions/insights"),
+
+  // Accessibility
+  getAccessibilityConfig: async (token: string) => {
+    const res = await fetch(`${API_BASE}/api/v1/accessibility/config/${token}`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError(res.status, (body as { detail?: string }).detail || "Failed to get config");
+    }
+    return res.json() as Promise<AccessibilityConfig>;
+  },
+  updateAccessibilityConfig: async (token: string, config: AccessibilityConfig) => {
+    const res = await fetch(`${API_BASE}/api/v1/accessibility/config/${token}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError(res.status, (body as { detail?: string }).detail || "Failed to update config");
+    }
+    return res.json() as Promise<AccessibilityConfig>;
+  },
+  getAccessibilityCssOverrides: async (token: string) => {
+    const res = await fetch(`${API_BASE}/api/v1/accessibility/css-overrides/${token}`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new ApiError(res.status, (body as { detail?: string }).detail || "Failed to get overrides");
+    }
+    return res.json() as Promise<Record<string, string>>;
+  },
+  getAccessibilityOrgSettings: async () =>
+    request<AccessibilityOrgSettings>("/api/v1/accessibility/org-settings"),
+  updateAccessibilityOrgSettings: async (settings: AccessibilityOrgSettings) =>
+    request<AccessibilityOrgSettings>("/api/v1/accessibility/org-settings", {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    }),
 
   // Code Execution
   executeCode: (

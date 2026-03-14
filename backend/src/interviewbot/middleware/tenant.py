@@ -24,6 +24,10 @@ PUBLIC_PREFIXES = (
     "/api/v1/interviews/public/",
     "/api/v1/practice/",
     "/api/v1/coach/",
+    "/api/v1/clips/public/",
+    "/api/v1/clip-collections/public/",
+    "/api/v1/accessibility/config/",
+    "/api/v1/accessibility/css-overrides/",
     "/ws/",
 )
 

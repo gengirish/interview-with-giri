@@ -8,6 +8,7 @@ import {
   type InterviewSession,
   type InterviewMessage,
   type CandidateReport,
+  type Clip,
 } from "@/lib/api";
 import type { IntegrityAssessment, BehaviorSummary, TimelinePoint } from "@/types";
 import {
@@ -17,6 +18,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Sparkles,
+  Bot,
   Shield,
   MessageSquare,
   Code2,
@@ -36,6 +38,17 @@ import {
   Users,
   Zap,
   TrendingUp,
+  Activity,
+  ArrowUp,
+  ArrowDown,
+  Minus,
+  Clock,
+  Dna,
+  RefreshCw,
+  Film,
+  Heart,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { cn, formatDuration, formatDate } from "@/lib/utils";
 import Link from "next/link";
@@ -53,8 +66,11 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  Line,
+  Bar,
+  ReferenceLine,
 } from "recharts";
-import { LazyRadarChart, LazyAreaChart } from "@/components/lazy-charts";
+import { LazyRadarChart, LazyAreaChart, LazyLineChart, LazyBarChart } from "@/components/lazy-charts";
 
 const TECHNICAL_DIMENSION_KEYS = [
   "code_quality",
@@ -167,6 +183,22 @@ function formatDurationMs(ms: number): string {
   return `${m}m ${s}s`;
 }
 
+function getClipTypeColor(type: string): string {
+  const colors: Record<string, string> = {
+    best_answer: "bg-green-500",
+    red_flag: "bg-red-500",
+    key_insight: "bg-blue-500",
+    culture_signal: "bg-purple-500",
+    technical_deep_dive: "bg-cyan-600",
+    growth_indicator: "bg-amber-500",
+  };
+  return colors[type] ?? "bg-slate-500";
+}
+
+function formatClipType(type: string): string {
+  return type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 interface ScoreEntry {
   score: number | null;
   evidence: string;
@@ -215,8 +247,21 @@ export default function InterviewDetailPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    "scorecard" | "integrity" | "transcript" | "highlights"
+    "scorecard" | "integrity" | "transcript" | "highlights" | "clips" | "engagement" | "genome" | "values" | "prediction"
   >("scorecard");
+  const [engagementProfile, setEngagementProfile] = useState<{
+    overall_engagement: number;
+    response_speed: {
+      avg_ms: number;
+      trend: string;
+      consistency: number;
+      per_question?: { q: number; ms: number }[];
+    };
+    confidence_pattern: { avg: number; arc: { q: number; v: number }[] };
+    elaboration_trend: { avg_depth: number; trend: string };
+    notable_signals: { type: string; question_index: number; detail: string }[];
+  } | null>(null);
+  const [engagementLoading, setEngagementLoading] = useState(false);
   const [highlights, setHighlights] = useState<
     Array<{
       message_index: number;
@@ -248,6 +293,35 @@ export default function InterviewDetailPage() {
   const [showMentionDropdown, setShowMentionDropdown] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
   const [postingComment, setPostingComment] = useState(false);
+  const [genome, setGenome] = useState<import("@/lib/api").CompetencyGenome | null | "none">(null);
+  const [genomeLoading] = useState(false);
+  const [genomeRebuilding, setGenomeRebuilding] = useState(false);
+  const [clips, setClips] = useState<Clip[]>([]);
+  const [clipsLoading] = useState(false);
+  const [clipsGenerating, setClipsGenerating] = useState(false);
+  const [valuesAssessment, setValuesAssessment] = useState<{
+    id: string;
+    session_id: string;
+    value_scores: Record<string, { score: number; confidence?: number; evidence?: string[] }>;
+    overall_fit_score: number | null;
+    fit_label: string | null;
+    ai_narrative: string | null;
+    created_at: string | null;
+  } | null | "none">(null);
+  const [valuesAssessmentLoading, setValuesAssessmentLoading] = useState(false);
+  const [valuesAssessing, setValuesAssessing] = useState(false);
+  const [valuesEvidenceExpanded, setValuesEvidenceExpanded] = useState<Record<string, boolean>>({});
+  const [prediction, setPrediction] = useState<{
+    success_probability: number;
+    confidence: string;
+    contributing_factors: Array<{ factor: string; value?: number; impact: string }>;
+    risk_factors: Array<{ factor: string; value?: number; impact: string }>;
+    is_heuristic: boolean;
+  } | null>(null);
+  const [predictionLoading, setPredictionLoading] = useState(false);
+  const [showOutcomeForm, setShowOutcomeForm] = useState(false);
+  const [outcomeRecorded, setOutcomeRecorded] = useState(false);
+  const [recordingOutcome, setRecordingOutcome] = useState(false);
 
   async function loadComments() {
     try {
@@ -266,6 +340,58 @@ export default function InterviewDetailPage() {
         .then((res) => setHighlights(res.highlights))
         .catch(() => setHighlights([]))
         .finally(() => setHighlightsLoading(false));
+    }
+  }, [activeTab, id, session?.status]);
+
+  useEffect(() => {
+    if (activeTab === "engagement" && report?.id) {
+      setEngagementLoading(true);
+      api
+        .getEngagementProfile(report.id)
+        .then((res) => setEngagementProfile(res.engagement_profile || null))
+        .catch(() => setEngagementProfile(null))
+        .finally(() => setEngagementLoading(false));
+    }
+  }, [activeTab, report?.id]);
+
+  useEffect(() => {
+    if (activeTab === "values") {
+      setValuesAssessmentLoading(true);
+      api
+        .getValuesAssessment(id)
+        .then(setValuesAssessment)
+        .catch((err) => {
+          if (err instanceof ApiError && err.status === 404) {
+            setValuesAssessment("none");
+          } else {
+            setValuesAssessment("none");
+          }
+        })
+        .finally(() => setValuesAssessmentLoading(false));
+    }
+  }, [activeTab, id]);
+
+  useEffect(() => {
+    if (activeTab === "prediction" && session?.status === "completed" && report) {
+      setPredictionLoading(true);
+      api
+        .getPrediction(id)
+        .then(setPrediction)
+        .catch(() => setPrediction(null))
+        .finally(() => setPredictionLoading(false));
+    }
+  }, [activeTab, id, session?.status, report]);
+
+  useEffect(() => {
+    if (activeTab === "prediction" && session?.status === "completed") {
+      api
+        .getOutcomeBySession(id)
+        .then(() => setOutcomeRecorded(true))
+        .catch((err) => {
+          if (err instanceof ApiError && err.status === 404) {
+            setOutcomeRecorded(false);
+          }
+        });
     }
   }, [activeTab, id, session?.status]);
 
@@ -603,6 +729,15 @@ export default function InterviewDetailPage() {
               </span>
             </div>
           )}
+          {session.status === "in_progress" && (
+            <Link
+              href={`/dashboard/copilot/${id}`}
+              className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
+            >
+              <Bot className="h-4 w-4" />
+              Launch Co-Pilot
+            </Link>
+          )}
         </div>
       </div>
 
@@ -663,6 +798,62 @@ export default function InterviewDetailPage() {
         >
           <Zap className="h-4 w-4" />
           Highlights
+        </button>
+        <button
+          role="tab"
+          aria-selected={activeTab === "clips"}
+          onClick={() => setActiveTab("clips")}
+          className={cn(
+            "flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+            activeTab === "clips"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-600 hover:text-slate-900",
+          )}
+        >
+          <Film className="h-4 w-4" />
+          Clips
+        </button>
+        <button
+          role="tab"
+          aria-selected={activeTab === "genome"}
+          onClick={() => setActiveTab("genome")}
+          className={cn(
+            "flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+            activeTab === "genome"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-600 hover:text-slate-900",
+          )}
+        >
+          <Dna className="h-4 w-4" />
+          Genome
+        </button>
+        <button
+          role="tab"
+          aria-selected={activeTab === "values"}
+          onClick={() => setActiveTab("values")}
+          className={cn(
+            "flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+            activeTab === "values"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-600 hover:text-slate-900",
+          )}
+        >
+          <Heart className="h-4 w-4" />
+          Cultural Fit
+        </button>
+        <button
+          role="tab"
+          aria-selected={activeTab === "prediction"}
+          onClick={() => setActiveTab("prediction")}
+          className={cn(
+            "flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+            activeTab === "prediction"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-600 hover:text-slate-900",
+          )}
+        >
+          <Target className="h-4 w-4" />
+          Prediction
         </button>
       </div>
 
@@ -1257,6 +1448,894 @@ export default function InterviewDetailPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {activeTab === "clips" && (
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+            <div>
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <Film className="h-4 w-4 text-indigo-500" />
+                Interview Clips
+              </h3>
+              <p className="mt-1 text-xs text-slate-500">
+                AI-extracted key moments for quick stakeholder review
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                if (session?.status !== "completed") return;
+                setClipsGenerating(true);
+                try {
+                  const generated = await api.generateClips(id);
+                  setClips(generated);
+                  toast.success(`Generated ${generated.length} clips`);
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Failed to generate clips");
+                } finally {
+                  setClipsGenerating(false);
+                }
+              }}
+              disabled={clipsGenerating || clipsLoading || session?.status !== "completed"}
+              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {clipsGenerating && <Loader2 className="h-4 w-4 animate-spin" />}
+              <Film className="h-4 w-4" />
+              Generate Clips
+            </button>
+          </div>
+          <div className="p-6">
+            {clipsLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+              </div>
+            ) : clips.length === 0 ? (
+              <div className="py-12 text-center">
+                <Film className="mx-auto h-12 w-12 text-slate-300" />
+                <p className="mt-4 text-sm text-slate-500">
+                  No clips yet. Click &quot;Generate Clips&quot; to extract key moments with AI.
+                </p>
+              </div>
+            ) : (
+              <div className="flex gap-4 overflow-x-auto pb-4 -mx-2 px-2 scrollbar-thin">
+                {clips.map((clip) => (
+                  <div
+                    key={clip.id}
+                    className="shrink-0 w-72 rounded-xl border border-slate-200 bg-slate-50/50 p-4 hover:border-indigo-200 transition-colors"
+                  >
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-2 py-0.5 text-xs font-medium text-white",
+                        getClipTypeColor(clip.clip_type),
+                      )}
+                    >
+                      {formatClipType(clip.clip_type)}
+                    </span>
+                    <h4 className="mt-2 text-sm font-semibold text-slate-900 line-clamp-2">{clip.title}</h4>
+                    <p className="mt-1 text-xs text-slate-600 line-clamp-2">
+                      {clip.transcript_excerpt.slice(0, 100)}
+                      {clip.transcript_excerpt.length > 100 ? "…" : ""}
+                    </p>
+                    {clip.importance_score != null && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="h-1.5 flex-1 rounded-full bg-slate-200 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-indigo-500"
+                            style={{ width: `${clip.importance_score * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-slate-500">
+                          {(clip.importance_score * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const { share_url } = await api.shareClip(clip.id);
+                          await navigator.clipboard.writeText(share_url);
+                          toast.success("Share link copied");
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : "Failed to share");
+                        }
+                      }}
+                      className="mt-3 flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-700"
+                    >
+                      <Share2 className="h-3.5 w-3.5" />
+                      Share
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "genome" && (
+        <div data-tour="genome" className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-200 px-6 py-4">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+              <Dna className="h-4 w-4 text-indigo-500" />
+              Competency Genome
+            </h3>
+            <p className="mt-1 text-xs text-slate-500">
+              DNA fingerprint across 24 competency dimensions
+            </p>
+          </div>
+          <div className="p-6">
+            {genomeLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+              </div>
+            ) : genome === "none" || !genome ? (
+              <div className="py-8 text-center">
+                <Dna className="mx-auto h-12 w-12 text-slate-300" />
+                <p className="mt-4 text-sm text-slate-600">
+                  No genome for this candidate yet.
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Genomes are built from completed interview reports. Rebuild to extract from all reports.
+                </p>
+                {session?.candidate_email && session?.status === "completed" && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setGenomeRebuilding(true);
+                      try {
+                        const g = await api.rebuildGenome(session.candidate_email!);
+                        setGenome(g);
+                        toast.success("Genome rebuilt");
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Rebuild failed");
+                      } finally {
+                        setGenomeRebuilding(false);
+                      }
+                    }}
+                    disabled={genomeRebuilding}
+                    className="mt-4 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {genomeRebuilding ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                    Rebuild Genome
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-slate-600">
+                    {genome.genome_data?.interview_count ?? 0} interviews contributed to this profile
+                  </p>
+                  {session?.candidate_email && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setGenomeRebuilding(true);
+                        try {
+                          const g = await api.rebuildGenome(session.candidate_email!);
+                          setGenome(g);
+                          toast.success("Genome rebuilt");
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : "Rebuild failed");
+                        } finally {
+                          setGenomeRebuilding(false);
+                        }
+                      }}
+                      disabled={genomeRebuilding}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      {genomeRebuilding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                      Rebuild
+                    </button>
+                  )}
+                </div>
+                {(() => {
+                  const dims = genome.genome_data?.dimensions ?? {};
+                  const radarData = Object.entries(dims).map(([k, v]) => ({
+                    dimension: (TECHNICAL_DIMENSION_LABELS[k] ?? k).replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+                    score: typeof v === "object" && v && "score" in v ? (v as { score: number }).score : 0,
+                    fullMark: 10,
+                  }));
+                  if (radarData.length === 0) {
+                    return <p className="text-sm text-slate-500">No dimension data</p>;
+                  }
+                  return (
+                    <div className="h-80">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LazyRadarChart data={radarData}>
+                          <PolarGrid />
+                          <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 11 }} />
+                          <PolarRadiusAxis angle={30} domain={[0, 10]} />
+                          <Radar
+                            name="Score"
+                            dataKey="score"
+                            stroke="#6366f1"
+                            fill="#6366f1"
+                            fillOpacity={0.3}
+                            strokeWidth={2}
+                          />
+                        </LazyRadarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "values" && (
+        <div data-tour="cultural-fit" className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+            <div>
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                <Heart className="h-4 w-4 text-indigo-500" />
+                Cultural Fit
+              </h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Values alignment assessment based on company values
+              </p>
+            </div>
+            {valuesAssessment === "none" && session?.status === "completed" && (
+              <button
+                type="button"
+                onClick={async () => {
+                  setValuesAssessing(true);
+                  try {
+                    const a = await api.assessValues(id);
+                    setValuesAssessment(a);
+                    toast.success("Assessment complete");
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Assessment failed");
+                  } finally {
+                    setValuesAssessing(false);
+                  }
+                }}
+                disabled={valuesAssessing}
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+              >
+                {valuesAssessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                Run Assessment
+              </button>
+            )}
+          </div>
+          <div className="p-6">
+            {valuesAssessmentLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+              </div>
+            ) : valuesAssessment === "none" || !valuesAssessment ? (
+              <div className="py-12 text-center">
+                <Heart className="mx-auto h-12 w-12 text-slate-300" />
+                <h3 className="mt-4 text-lg font-medium text-slate-900">
+                  No cultural fit assessment yet
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  {session?.status === "completed"
+                    ? "Configure company values in Settings, then run the assessment to analyze candidate alignment."
+                    : "Complete the interview first to run a values assessment."}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Fit label badge & overall score */}
+                <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
+                  <div className="relative flex h-24 w-24 items-center justify-center">
+                    <svg className="h-24 w-24 -rotate-90" viewBox="0 0 36 36">
+                      <path
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        className="text-slate-200"
+                      />
+                      <path
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                        fill="none"
+                        strokeWidth="2.5"
+                        strokeDasharray={`${((valuesAssessment.overall_fit_score ?? 0) / 10) * 100}, 100`}
+                        strokeLinecap="round"
+                        className={cn(
+                          (valuesAssessment.overall_fit_score ?? 0) >= 8
+                            ? "text-emerald-500"
+                            : (valuesAssessment.overall_fit_score ?? 0) >= 6
+                              ? "text-blue-500"
+                              : (valuesAssessment.overall_fit_score ?? 0) >= 4
+                                ? "text-amber-500"
+                                : "text-red-500"
+                        )}
+                      />
+                    </svg>
+                    <span className="absolute text-2xl font-bold text-slate-900">
+                      {(valuesAssessment.overall_fit_score ?? 0).toFixed(1)}
+                    </span>
+                  </div>
+                  <div className="text-center sm:text-left">
+                    <span
+                      className={cn(
+                        "inline-block rounded-full px-3 py-1 text-sm font-medium",
+                        (valuesAssessment.overall_fit_score ?? 0) >= 8
+                          ? "bg-emerald-100 text-emerald-800"
+                          : (valuesAssessment.overall_fit_score ?? 0) >= 6
+                            ? "bg-blue-100 text-blue-800"
+                            : (valuesAssessment.overall_fit_score ?? 0) >= 4
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-red-100 text-red-800"
+                      )}
+                    >
+                      {valuesAssessment.fit_label ?? "Unknown"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Radar chart */}
+                {Object.keys(valuesAssessment.value_scores || {}).length > 0 && (
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LazyRadarChart
+                        data={Object.entries(valuesAssessment.value_scores || {}).map(([dim, data]) => ({
+                          dimension: dim.replace(/\b\w/g, (c) => c.toUpperCase()),
+                          score: typeof data === "object" && data && "score" in data ? (data as { score: number }).score : 0,
+                          fullMark: 10,
+                        }))}
+                      >
+                        <PolarGrid />
+                        <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 11 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 10]} />
+                        <Radar
+                          name="Fit"
+                          dataKey="score"
+                          stroke="#6366f1"
+                          fill="#6366f1"
+                          fillOpacity={0.3}
+                          strokeWidth={2}
+                        />
+                      </LazyRadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
+                {/* Evidence cards */}
+                {Object.entries(valuesAssessment.value_scores || {}).length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-medium text-slate-700 mb-3">Evidence by Value</h4>
+                    <div className="space-y-2">
+                      {Object.entries(valuesAssessment.value_scores).map(([valueName, data]) => {
+                        const score = typeof data === "object" && data && "score" in data ? (data as { score: number }).score : 0;
+                        const confidence = typeof data === "object" && data && "confidence" in data ? (data as { confidence?: number }).confidence : undefined;
+                        const evidence = typeof data === "object" && data && "evidence" in data ? (data as { evidence?: string[] }).evidence : [];
+                        const isExpanded = valuesEvidenceExpanded[valueName] ?? false;
+                        return (
+                          <div
+                            key={valueName}
+                            className="rounded-lg border border-slate-200 bg-slate-50/50 overflow-hidden"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setValuesEvidenceExpanded((p) => ({ ...p, [valueName]: !isExpanded }))}
+                              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-100/50 transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className="font-medium text-slate-900">{valueName}</span>
+                                <span className={cn(
+                                  "rounded-full px-2 py-0.5 text-xs font-medium",
+                                  score >= 8 ? "bg-emerald-100 text-emerald-800" : score >= 6 ? "bg-blue-100 text-blue-800" : score >= 4 ? "bg-amber-100 text-amber-800" : "bg-red-100 text-red-800"
+                                )}>
+                                  {score.toFixed(1)}
+                                </span>
+                                {confidence != null && (
+                                  <span className="text-xs text-slate-500">
+                                    {(confidence * 100).toFixed(0)}% confidence
+                                  </span>
+                                )}
+                              </div>
+                              {isExpanded ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
+                            </button>
+                            {isExpanded && evidence && evidence.length > 0 && (
+                              <div className="border-t border-slate-200 px-4 py-3 bg-white">
+                                <ul className="space-y-1 text-sm text-slate-600">
+                                  {evidence.map((e, i) => (
+                                    <li key={i} className="flex gap-2">
+                                      <span className="text-indigo-500">&ldquo;</span>
+                                      {e}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* AI narrative */}
+                {valuesAssessment.ai_narrative && (
+                  <div className="rounded-xl border border-indigo-100 bg-indigo-50/30 p-6">
+                    <h4 className="flex items-center gap-2 text-sm font-semibold text-slate-900 mb-3">
+                      <Sparkles className="h-4 w-4 text-indigo-600" />
+                      AI Assessment
+                    </h4>
+                    <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                      {valuesAssessment.ai_narrative}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "engagement" && (
+        <div data-tour="engagement" className="space-y-6">
+          {engagementLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+            </div>
+          ) : !report ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-12 text-center shadow-sm">
+              <Activity className="mx-auto h-12 w-12 text-slate-300" />
+              <h3 className="mt-4 text-lg font-medium text-slate-900">
+                Generate a report first
+              </h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Engagement metrics are computed when the report is generated.
+              </p>
+            </div>
+          ) : !engagementProfile || Object.keys(engagementProfile).length === 0 ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-12 text-center shadow-sm">
+              <Activity className="mx-auto h-12 w-12 text-slate-300" />
+              <h3 className="mt-4 text-lg font-medium text-slate-900">
+                No engagement data
+              </h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Engagement profile will appear after report generation.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Overall engagement badge */}
+              <div className="flex flex-col items-center gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:flex-row sm:justify-between">
+                <div className="relative flex h-24 w-24 items-center justify-center">
+                  <svg className="h-24 w-24 -rotate-90" viewBox="0 0 36 36">
+                    <path
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      className="text-slate-200"
+                    />
+                    <path
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      strokeWidth="2.5"
+                      strokeDasharray={`${(engagementProfile.overall_engagement || 0) * 100}, 100`}
+                      strokeLinecap="round"
+                      className={cn(
+                        (engagementProfile.overall_engagement || 0) > 0.7
+                          ? "text-emerald-500"
+                          : (engagementProfile.overall_engagement || 0) >= 0.4
+                            ? "text-amber-500"
+                            : "text-red-500"
+                      )}
+                    />
+                  </svg>
+                  <span className="absolute text-2xl font-bold text-slate-900">
+                    {Math.round((engagementProfile.overall_engagement || 0) * 100)}%
+                  </span>
+                </div>
+                <div className="text-center sm:text-left">
+                  <span className="text-sm font-medium text-slate-700">
+                    Overall Engagement
+                  </span>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Behavioral signals from candidate responses
+                  </p>
+                </div>
+              </div>
+
+              {/* Confidence timeline */}
+              {engagementProfile.confidence_pattern?.arc?.length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h4 className="mb-4 text-sm font-medium text-slate-700">
+                    Confidence Timeline
+                  </h4>
+                  <div className="h-[200px] w-full">
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LazyLineChart
+                        data={engagementProfile.confidence_pattern.arc}
+                        margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis
+                          dataKey="q"
+                          tick={{ fontSize: 11 }}
+                          tickFormatter={(v) => `Q${v}`}
+                        />
+                        <YAxis
+                          domain={[0, 1]}
+                          tick={{ fontSize: 11 }}
+                          tickFormatter={(v) => v.toFixed(1)}
+                        />
+                        <Tooltip
+                          formatter={(v) => [Number(v).toFixed(2), "Confidence"]}
+                          labelFormatter={(l) => `Question ${l}`}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="v"
+                          stroke="#6366f1"
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                          name="Confidence"
+                        />
+                      </LazyLineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+
+              {/* Response speed chart */}
+              {(() => {
+                const perQ =
+                  engagementProfile.response_speed?.per_question ?? [];
+                const avgMs = engagementProfile.response_speed?.avg_ms ?? 0;
+                if (perQ.length === 0) return null;
+                return (
+                  <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <h4 className="mb-4 text-sm font-medium text-slate-700">
+                      Response Speed
+                    </h4>
+                    <div className="h-[200px] w-full">
+                      <ResponsiveContainer width="100%" height={200}>
+                        <LazyBarChart
+                          data={perQ}
+                          margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                          <XAxis
+                            dataKey="q"
+                            tick={{ fontSize: 11 }}
+                            tickFormatter={(v) => `Q${v}`}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 11 }}
+                            tickFormatter={(v) => `${(v / 1000).toFixed(1)}s`}
+                          />
+                          <Tooltip
+                            formatter={(v) => [
+                              `${(Number(v) / 1000).toFixed(1)}s`,
+                              "Latency",
+                            ]}
+                            labelFormatter={(l) => `Question ${l}`}
+                          />
+                          <Bar dataKey="ms" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                          {avgMs > 0 && (
+                            <ReferenceLine
+                              y={avgMs}
+                              stroke="#ef4444"
+                              strokeDasharray="4 4"
+                              label={{ value: "Avg", position: "right" }}
+                            />
+                          )}
+                        </LazyBarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Trend indicators */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h4 className="text-xs font-medium text-slate-500">
+                    Response Speed Trend
+                  </h4>
+                  <p className="mt-1 flex items-center gap-1.5 text-sm font-medium text-slate-700">
+                    {engagementProfile.response_speed?.trend === "improving" ? (
+                      <>
+                        <ArrowUp className="h-4 w-4 text-emerald-500" />
+                        Improving ↑
+                      </>
+                    ) : engagementProfile.response_speed?.trend === "slowing" ? (
+                      <>
+                        <ArrowDown className="h-4 w-4 text-amber-500" />
+                        Slowing ↓
+                      </>
+                    ) : (
+                      <>
+                        <Minus className="h-4 w-4 text-slate-500" />
+                        Stable →
+                      </>
+                    )}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h4 className="text-xs font-medium text-slate-500">
+                    Elaboration Trend
+                  </h4>
+                  <p className="mt-1 flex items-center gap-1.5 text-sm font-medium text-slate-700">
+                    {engagementProfile.elaboration_trend?.trend === "increasing" ? (
+                      <>
+                        <ArrowUp className="h-4 w-4 text-emerald-500" />
+                        Increasing ↑
+                      </>
+                    ) : engagementProfile.elaboration_trend?.trend === "decreasing" ? (
+                      <>
+                        <ArrowDown className="h-4 w-4 text-amber-500" />
+                        Decreasing ↓
+                      </>
+                    ) : (
+                      <>
+                        <Minus className="h-4 w-4 text-slate-500" />
+                        Stable →
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {/* Notable signals */}
+              {engagementProfile.notable_signals?.length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h4 className="mb-4 text-sm font-medium text-slate-700">
+                    Notable Signals
+                  </h4>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {engagementProfile.notable_signals.map((sig, i) => (
+                      <div
+                        key={i}
+                        className={cn(
+                          "flex items-start gap-3 rounded-lg border p-3",
+                          sig.type === "confidence_spike"
+                            ? "border-emerald-200 bg-emerald-50"
+                            : sig.type === "hesitation_cluster"
+                              ? "border-amber-200 bg-amber-50"
+                              : "border-orange-200 bg-orange-50"
+                        )}
+                      >
+                        {sig.type === "confidence_spike" ? (
+                          <ArrowUp className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
+                        ) : sig.type === "hesitation_cluster" ? (
+                          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+                        ) : (
+                          <Clock className="mt-0.5 h-5 w-5 shrink-0 text-orange-500" />
+                        )}
+                        <div>
+                          <p className="text-xs font-medium text-slate-600">
+                            Q{sig.question_index}
+                          </p>
+                          <p className="text-sm text-slate-700">{sig.detail}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {activeTab === "prediction" && (
+        <div data-testid="prediction-tab" className="space-y-6">
+          {!report ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-12 text-center shadow-sm">
+              <Target className="mx-auto h-12 w-12 text-slate-300" />
+              <h3 className="mt-4 text-lg font-medium text-slate-900">
+                Generate a report first
+              </h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Success prediction requires a generated report.
+              </p>
+            </div>
+          ) : predictionLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+            </div>
+          ) : prediction ? (
+            <>
+              {/* Success gauge */}
+              <div className="flex flex-col items-center gap-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:flex-row sm:justify-between">
+                <div className="relative flex h-24 w-24 items-center justify-center">
+                  <svg className="h-24 w-24 -rotate-90" viewBox="0 0 36 36">
+                    <path
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      className="text-slate-200"
+                    />
+                    <path
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      fill="none"
+                      strokeWidth="2.5"
+                      strokeDasharray={`${prediction.success_probability * 100}, 100`}
+                      strokeLinecap="round"
+                      className={cn(
+                        prediction.success_probability > 0.7
+                          ? "text-emerald-500"
+                          : prediction.success_probability >= 0.4
+                            ? "text-amber-500"
+                            : "text-red-500"
+                      )}
+                    />
+                  </svg>
+                  <span className="absolute text-2xl font-bold text-slate-900">
+                    {Math.round(prediction.success_probability * 100)}%
+                  </span>
+                </div>
+                <div className="flex flex-col items-center gap-2 sm:items-start">
+                  <span
+                    className={cn(
+                      "inline-block rounded-full px-3 py-1 text-sm font-medium capitalize",
+                      prediction.success_probability > 0.7
+                        ? "bg-emerald-100 text-emerald-800"
+                        : prediction.success_probability >= 0.4
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-red-100 text-red-800"
+                    )}
+                  >
+                    Success probability
+                  </span>
+                  {prediction.is_heuristic ? (
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                      Estimated
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                      Predicted
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Contributing & risk factors */}
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-emerald-800">
+                    <Check className="h-4 w-4 text-emerald-500" />
+                    Contributing Factors
+                  </h3>
+                  <ul className="mt-3 space-y-2">
+                    {prediction.contributing_factors.length > 0 ? (
+                      prediction.contributing_factors.map((f, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                          {f.factor}
+                          {f.value != null && (
+                            <span className="text-slate-500">({f.value})</span>
+                          )}
+                        </li>
+                      ))
+                    ) : (
+                      <li className="text-sm text-slate-500">None identified</li>
+                    )}
+                  </ul>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-red-800">
+                    <AlertTriangle className="h-4 w-4 text-red-500" />
+                    Risk Factors
+                  </h3>
+                  <ul className="mt-3 space-y-2">
+                    {prediction.risk_factors.length > 0 ? (
+                      prediction.risk_factors.map((f, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+                          {f.factor}
+                          {f.value != null && (
+                            <span className="text-slate-500">({f.value})</span>
+                          )}
+                        </li>
+                      ))
+                    ) : (
+                      <li className="text-sm text-slate-500">None identified</li>
+                    )}
+                  </ul>
+                </div>
+              </div>
+
+              {/* Record Outcome */}
+              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-900 mb-4">
+                  Hiring Outcome
+                </h3>
+                {outcomeRecorded ? (
+                  <p className="text-sm text-slate-600">
+                    Outcome recorded. Update post-hire feedback from the Predictions dashboard.
+                  </p>
+                ) : showOutcomeForm ? (
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const form = e.currentTarget;
+                      const wasHired = (form.elements.namedItem("was_hired") as HTMLInputElement)?.checked ?? false;
+                      const hireDate = (form.elements.namedItem("hire_date") as HTMLInputElement)?.value || undefined;
+                      setRecordingOutcome(true);
+                      try {
+                        await api.recordOutcome({
+                          session_id: id,
+                          candidate_email: session?.candidate_email ?? "",
+                          was_hired: wasHired,
+                          hire_date: hireDate || undefined,
+                        });
+                        setOutcomeRecorded(true);
+                        setShowOutcomeForm(false);
+                        toast.success("Outcome recorded");
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "Failed to record outcome");
+                      } finally {
+                        setRecordingOutcome(false);
+                      }
+                    }}
+                    className="space-y-4"
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="was_hired"
+                        name="was_hired"
+                        className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <label htmlFor="was_hired" className="text-sm font-medium text-slate-700">
+                        Was hired
+                      </label>
+                    </div>
+                    <div>
+                      <label htmlFor="hire_date" className="block text-sm font-medium text-slate-700 mb-1">
+                        Hire date (optional)
+                      </label>
+                      <input
+                        type="date"
+                        id="hire_date"
+                        name="hire_date"
+                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={recordingOutcome}
+                        className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        {recordingOutcome ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowOutcomeForm(false)}
+                        className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowOutcomeForm(true)}
+                    className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                  >
+                    Record Outcome
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-white p-12 text-center shadow-sm">
+              <Target className="mx-auto h-12 w-12 text-slate-300" />
+              <p className="mt-4 text-sm text-slate-500">
+                Unable to load prediction
+              </p>
+            </div>
+          )}
         </div>
       )}
 

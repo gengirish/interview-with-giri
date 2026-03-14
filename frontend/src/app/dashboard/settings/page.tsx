@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { api, type SubscriptionInfo, type BillingPlan, type WebhookConfig } from "@/lib/api";
+import { api, type SubscriptionInfo, type BillingPlan, type WebhookConfig, type AccessibilityOrgSettings } from "@/lib/api";
 import {
   Loader2,
   CreditCard,
@@ -12,6 +12,10 @@ import {
   Mail,
   CheckCircle2,
   Palette,
+  Plus,
+  Trash2,
+  Sparkles,
+  Accessibility,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -68,6 +72,37 @@ export default function SettingsPage() {
   });
   const [brandingLoading, setBrandingLoading] = useState(false);
   const [brandingSaving, setBrandingSaving] = useState(false);
+  const [companyValues, setCompanyValues] = useState<
+    Array<{ name: string; definition: string; weight: number; behavioral_indicators: string[] }>
+  >([]);
+  const [valuesLoading, setValuesLoading] = useState(false);
+  const [valuesSaving, setValuesSaving] = useState(false);
+  const [valuesQuestions, setValuesQuestions] = useState<
+    Record<string, Array<{ question: string; probes?: string[] }>> | null
+  >(null);
+  const [valuesQuestionsLoading, setValuesQuestionsLoading] = useState(false);
+  const [addingValue, setAddingValue] = useState(false);
+  const [newValue, setNewValue] = useState({
+    name: "",
+    definition: "",
+    weight: 0.25,
+    indicators: "",
+  });
+  const [accessibilitySettings, setAccessibilitySettings] = useState<AccessibilityOrgSettings>({
+    default_mode: "offer_choice",
+    allowed_accommodations: [
+      "extended_time",
+      "screen_reader",
+      "high_contrast",
+      "dyslexia_font",
+      "large_text",
+      "reduced_motion",
+      "keyboard_only",
+    ],
+    custom_instructions: "",
+  });
+  const [accessibilityLoading, setAccessibilityLoading] = useState(false);
+  const [accessibilitySaving, setAccessibilitySaving] = useState(false);
 
   useEffect(() => {
     try {
@@ -149,6 +184,43 @@ export default function SettingsPage() {
           toast.error(err instanceof Error ? err.message : "Failed to load branding");
         })
         .finally(() => setBrandingLoading(false));
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "accessibility") {
+      setAccessibilityLoading(true);
+      api
+        .getAccessibilityOrgSettings()
+        .then(setAccessibilitySettings)
+        .catch(() =>
+          setAccessibilitySettings({
+            default_mode: "offer_choice",
+            allowed_accommodations: [
+              "extended_time",
+              "screen_reader",
+              "high_contrast",
+              "dyslexia_font",
+              "large_text",
+              "reduced_motion",
+              "keyboard_only",
+            ],
+            custom_instructions: "",
+          })
+        )
+        .finally(() => setAccessibilityLoading(false));
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "values") {
+      setValuesLoading(true);
+      api
+        .getCompanyValues()
+        .then((res) => setCompanyValues(res?.values ?? []))
+        .catch(() => setCompanyValues([]))
+        .finally(() => setValuesLoading(false));
+      setValuesQuestions(null);
     }
   }, [activeTab]);
 
@@ -266,6 +338,7 @@ export default function SettingsPage() {
     { id: "webhooks", label: "Webhooks", icon: Link2 },
     { id: "notifications", label: "Notifications", icon: Bell },
     { id: "integrations", label: "Integrations", icon: Plug },
+    { id: "accessibility", label: "Accessibility", icon: Accessibility },
   ];
 
   if (loading) {
@@ -661,6 +734,241 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {activeTab === "values" && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-900">
+            Company Values
+          </h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Define your organization&apos;s core values. AI will generate scenario-based
+            behavioral questions and assess candidate alignment.
+          </p>
+
+          {valuesLoading ? (
+            <div className="mt-6 flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+            </div>
+          ) : (
+            <div className="mt-6 space-y-6">
+              {/* Current values list */}
+              <div>
+                <h4 className="text-xs font-medium text-slate-600 uppercase tracking-wider mb-3">
+                  Current Values
+                </h4>
+                {companyValues.length === 0 ? (
+                  <p className="text-sm text-slate-500 py-4">
+                    No values defined yet. Add your first value below.
+                  </p>
+                ) : (
+                  <ul className="space-y-3">
+                    {companyValues.map((v, idx) => (
+                      <li
+                        key={idx}
+                        className="flex items-start justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50/50 p-4"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-slate-900">{v.name}</p>
+                          {v.definition && (
+                            <p className="mt-1 text-sm text-slate-600">{v.definition}</p>
+                          )}
+                          <p className="mt-1 text-xs text-slate-500">
+                            Weight: {(v.weight * 100).toFixed(0)}%
+                            {v.behavioral_indicators?.length > 0 && (
+                              <> · Indicators: {v.behavioral_indicators.join(", ")}</>
+                            )}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCompanyValues((prev) => prev.filter((_, i) => i !== idx));
+                          }}
+                          className="shrink-0 rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                          aria-label="Remove value"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* Add value form */}
+              {addingValue ? (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-4">
+                  <h4 className="text-sm font-medium text-slate-700">Add Value</h4>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Name</label>
+                    <input
+                      type="text"
+                      value={newValue.name}
+                      onChange={(e) => setNewValue((p) => ({ ...p, name: e.target.value }))}
+                      placeholder="e.g. Ownership"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Definition</label>
+                    <textarea
+                      value={newValue.definition}
+                      onChange={(e) => setNewValue((p) => ({ ...p, definition: e.target.value }))}
+                      placeholder="What this value means to your organization..."
+                      rows={2}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                      Weight (0–1): {(newValue.weight * 100).toFixed(0)}%
+                    </label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={newValue.weight}
+                      onChange={(e) => setNewValue((p) => ({ ...p, weight: parseFloat(e.target.value) }))}
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">
+                      Behavioral Indicators (comma-separated)
+                    </label>
+                    <input
+                      type="text"
+                      value={newValue.indicators}
+                      onChange={(e) => setNewValue((p) => ({ ...p, indicators: e.target.value }))}
+                      placeholder="e.g. takes initiative, follows through, accountability"
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (newValue.name.trim()) {
+                          setCompanyValues((prev) => [
+                            ...prev,
+                            {
+                              name: newValue.name.trim(),
+                              definition: newValue.definition.trim(),
+                              weight: newValue.weight,
+                              behavioral_indicators: newValue.indicators
+                                .split(",")
+                                .map((s) => s.trim())
+                                .filter(Boolean),
+                            },
+                          ]);
+                          setNewValue({ name: "", definition: "", weight: 0.25, indicators: "" });
+                          setAddingValue(false);
+                        }
+                      }}
+                      disabled={!newValue.name.trim()}
+                      className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAddingValue(false);
+                        setNewValue({ name: "", definition: "", weight: 0.25, indicators: "" });
+                      }}
+                      className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setAddingValue(true)}
+                  className="flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 hover:border-indigo-400 hover:text-indigo-600 transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Value
+                </button>
+              )}
+
+              {/* Save & Generate Questions */}
+              <div className="flex flex-wrap gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setValuesSaving(true);
+                    try {
+                      await api.updateCompanyValues(companyValues);
+                      toast.success("Values saved");
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Failed to save values");
+                    } finally {
+                      setValuesSaving(false);
+                    }
+                  }}
+                  disabled={valuesSaving || companyValues.length === 0}
+                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                >
+                  {valuesSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Save Values
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setValuesQuestionsLoading(true);
+                    setValuesQuestions(null);
+                    try {
+                      const res = await api.generateValueQuestions();
+                      setValuesQuestions(res.questions);
+                      toast.success("Questions generated");
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "Failed to generate questions");
+                    } finally {
+                      setValuesQuestionsLoading(false);
+                    }
+                  }}
+                  disabled={valuesQuestionsLoading || companyValues.length === 0}
+                  className="inline-flex items-center gap-2 rounded-lg border border-indigo-600 px-4 py-2.5 text-sm font-medium text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
+                >
+                  {valuesQuestionsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  Generate Questions
+                </button>
+              </div>
+
+              {/* Generated questions */}
+              {valuesQuestions && Object.keys(valuesQuestions).length > 0 && (
+                <div className="rounded-lg border border-slate-200 bg-indigo-50/30 p-4">
+                  <h4 className="text-sm font-semibold text-slate-900 mb-3">Generated Questions</h4>
+                  <div className="space-y-4">
+                    {Object.entries(valuesQuestions).map(([valueName, questions]) => (
+                      <div key={valueName}>
+                        <p className="text-xs font-medium text-indigo-700 uppercase tracking-wider mb-2">
+                          {valueName}
+                        </p>
+                        <ul className="space-y-2">
+                          {(questions || []).map((q, i) => (
+                            <li key={i} className="text-sm text-slate-700 pl-2 border-l-2 border-indigo-200">
+                              <p>{q.question}</p>
+                              {q.probes && q.probes.length > 0 && (
+                                <p className="mt-1 text-xs text-slate-500">
+                                  Probes: {q.probes.join("; ")}
+                                </p>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {activeTab === "email" && (
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h3 className="text-sm font-semibold text-slate-900">
@@ -863,6 +1171,146 @@ export default function SettingsPage() {
               </label>
             ))}
           </div>
+        </div>
+      )}
+
+      {activeTab === "accessibility" && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-900">
+            Accessibility Settings
+          </h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Configure default accessibility options for candidate interviews.
+            Candidates can customize accommodations when starting their interview.
+          </p>
+
+          {accessibilityLoading ? (
+            <div className="mt-6 flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+            </div>
+          ) : (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setAccessibilitySaving(true);
+                try {
+                  await api.updateAccessibilityOrgSettings(accessibilitySettings);
+                  toast.success("Accessibility settings saved");
+                } catch (err) {
+                  toast.error(
+                    err instanceof Error ? err.message : "Failed to save settings"
+                  );
+                } finally {
+                  setAccessibilitySaving(false);
+                }
+              }}
+              className="mt-6 space-y-4"
+            >
+              <div>
+                <label
+                  htmlFor="accessibility-default-mode"
+                  className="block text-sm font-medium text-slate-700 mb-1"
+                >
+                  Default mode
+                </label>
+                <select
+                  id="accessibility-default-mode"
+                  value={accessibilitySettings.default_mode}
+                  onChange={(e) =>
+                    setAccessibilitySettings((s) => ({
+                      ...s,
+                      default_mode: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                >
+                  <option value="always_standard">Always Standard</option>
+                  <option value="always_accessible">Always Accessible</option>
+                  <option value="offer_choice">Offer Choice</option>
+                </select>
+                <p className="mt-1 text-xs text-slate-500">
+                  When to show accessibility options to candidates
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Allowed accommodations
+                </label>
+                <div className="space-y-2 rounded-lg border border-slate-200 p-4">
+                  {[
+                    { id: "extended_time", label: "Extended time" },
+                    { id: "screen_reader", label: "Screen reader optimized" },
+                    { id: "high_contrast", label: "High contrast mode" },
+                    { id: "dyslexia_font", label: "Dyslexia-friendly font" },
+                    { id: "large_text", label: "Large text" },
+                    { id: "reduced_motion", label: "Reduced motion" },
+                    { id: "keyboard_only", label: "Keyboard-only navigation" },
+                  ].map(({ id, label }) => (
+                    <label
+                      key={id}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={accessibilitySettings.allowed_accommodations.includes(id)}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...accessibilitySettings.allowed_accommodations, id]
+                            : accessibilitySettings.allowed_accommodations.filter(
+                                (a) => a !== id
+                              );
+                          setAccessibilitySettings((s) => ({
+                            ...s,
+                            allowed_accommodations: next,
+                          }));
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span className="text-sm text-slate-700">{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="accessibility-custom-instructions"
+                  className="block text-sm font-medium text-slate-700 mb-1"
+                >
+                  Custom instructions
+                </label>
+                <textarea
+                  id="accessibility-custom-instructions"
+                  value={accessibilitySettings.custom_instructions}
+                  onChange={(e) =>
+                    setAccessibilitySettings((s) => ({
+                      ...s,
+                      custom_instructions: e.target.value,
+                    }))
+                  }
+                  rows={3}
+                  placeholder="Optional instructions shown to candidates..."
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none resize-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={accessibilitySaving}
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors disabled:opacity-50"
+              >
+                {accessibilitySaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save"
+                )}
+              </button>
+            </form>
+          )}
         </div>
       )}
 

@@ -15,6 +15,10 @@ from interviewbot.models.tables import (
     JobPosting,
 )
 from interviewbot.services.ai_engine import GENERAL_SCORING_PROMPT, SWE_SCORING_PROMPT, AIEngine
+from interviewbot.services.engagement_analyzer import (
+    compute_engagement_profile,
+    compute_message_metrics,
+)
 
 logger = structlog.get_logger()
 
@@ -100,6 +104,25 @@ async def score_interview(session_id: str, db: AsyncSession) -> CandidateReport 
 
     skill_scores, behavioral_scores, extended_data = _extract_report_data(scores, is_swe)
 
+    # Compute engagement metrics for candidate messages and build profile
+    messages_with_metrics: list[dict] = []
+    prev_ts = None
+    for msg in messages:
+        if msg.role != "candidate":
+            prev_ts = msg.created_at
+            continue
+        latency_ms = None
+        if prev_ts and msg.created_at:
+            delta = msg.created_at - prev_ts
+            latency_ms = int(delta.total_seconds() * 1000)
+        metrics = compute_message_metrics(msg.content, response_latency_ms=latency_ms)
+        msg.engagement_metrics = metrics
+        messages_with_metrics.append(metrics)
+        prev_ts = msg.created_at
+
+    engagement_profile = compute_engagement_profile(messages_with_metrics)
+    await db.commit()
+
     report = CandidateReport(
         session_id=session.id,
         skill_scores=skill_scores,
@@ -110,6 +133,7 @@ async def score_interview(session_id: str, db: AsyncSession) -> CandidateReport 
         recommendation=_normalize_recommendation(scores.get("recommendation", "")),
         confidence_score=float(scores.get("confidence_score", 0.5)),
         extended_data=extended_data or {},
+        engagement_profile=engagement_profile,
     )
     db.add(report)
     await db.commit()

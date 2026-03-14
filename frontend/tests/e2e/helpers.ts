@@ -137,6 +137,9 @@ export const MOCK_ANALYTICS_PER_JOB: object[] = [];
 /** Mock users (for team page) */
 export const MOCK_USERS: object[] = [];
 
+/** Mock decision trees */
+export const MOCK_DECISION_TREES: object[] = [];
+
 /**
  * Setup common mocks for dashboard (stats, job postings, interviews, analytics, users).
  * All API calls are mocked - no real backend needed.
@@ -149,6 +152,7 @@ export async function setupDashboardMocks(page: Page, options?: {
   analyticsOverview?: object;
   analyticsPerJob?: object[];
   users?: object[];
+  decisionTrees?: object[];
 }): Promise<void> {
   const stats = options?.stats ?? MOCK_DASHBOARD_STATS;
   const jobs = options?.emptyJobs
@@ -163,6 +167,7 @@ export async function setupDashboardMocks(page: Page, options?: {
   const analyticsOverview = options?.analyticsOverview ?? MOCK_ANALYTICS_OVERVIEW;
   const analyticsPerJob = options?.analyticsPerJob ?? MOCK_ANALYTICS_PER_JOB;
   const users = options?.users ?? MOCK_USERS;
+  const decisionTrees = options?.decisionTrees ?? MOCK_DECISION_TREES;
 
   await page.route(API_PATTERN, async (route) => {
     const url = route.request().url();
@@ -242,6 +247,26 @@ export async function setupDashboardMocks(page: Page, options?: {
         contentType: "application/json",
         body: JSON.stringify(users),
       });
+    } else if (url.includes("/decision-trees") && !url.includes("/validate")) {
+      if (method === "GET" && !url.match(/\/decision-trees\/[^/]+\//)) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(decisionTrees),
+        });
+      } else if (method === "GET" && url.match(/\/decision-trees\/[^/]+$/)) {
+        const id = url.split("/decision-trees/")[1]?.split("/")[0];
+        const tree = Array.isArray(decisionTrees)
+          ? (decisionTrees as { id: string }[]).find((t) => t.id === id)
+          : null;
+        await route.fulfill({
+          status: tree ? 200 : 404,
+          contentType: "application/json",
+          body: tree ? JSON.stringify(tree) : JSON.stringify({ detail: "Not found" }),
+        });
+      } else {
+        await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
+      }
     } else {
       await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ detail: "Not mocked" }) });
     }

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { GenerateLinkModal } from "@/components/generate-link-modal";
 import { ImportJobsModal } from "@/components/import-jobs-modal";
+import { ScrapeJobsModal } from "@/components/scrape-jobs-modal";
 import { api, type JobPosting } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import { useWalkthrough } from "@/hooks/use-walkthrough";
@@ -19,6 +20,7 @@ import {
   FileText,
   X,
   Gauge,
+  Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -59,6 +61,7 @@ type FormData = {
     language: string;
   };
   scoring_rubric: ScoringDimension[];
+  decision_tree_id: string;
 };
 
 const defaultForm: FormData = {
@@ -75,6 +78,7 @@ const defaultForm: FormData = {
     language: "en",
   },
   scoring_rubric: [],
+  decision_tree_id: "",
 };
 
 const COMMON_DIMENSIONS: ScoringDimension[] = [
@@ -99,6 +103,7 @@ export default function JobsPage() {
   const [generateLinkJob, setGenerateLinkJob] = useState<JobPosting | null>(null);
   const [deleteJobId, setDeleteJobId] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
+  const [showScrape, setShowScrape] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [templates, setTemplates] = useState<
     Array<{
@@ -120,6 +125,7 @@ export default function JobsPage() {
   const [isActiveFilter, setIsActiveFilter] = useState<string>("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [decisionTrees, setDecisionTrees] = useState<{ id: string; name: string; role_type: string | null; is_published?: boolean }[]>([]);
   const perPage = 20;
 
   const loadJobs = useCallback(async () => {
@@ -147,6 +153,13 @@ export default function JobsPage() {
   useEffect(() => {
     loadJobs();
   }, [loadJobs]);
+
+  useEffect(() => {
+    api
+      .listDecisionTrees()
+      .then((list) => setDecisionTrees(list))
+      .catch(() => setDecisionTrees([]));
+  }, []);
 
   async function loadTemplates() {
     setTemplatesLoading(true);
@@ -205,6 +218,7 @@ export default function JobsPage() {
         interview_format: form.interview_format,
         interview_config: form.interview_config,
         scoring_rubric: form.scoring_rubric,
+        decision_tree_id: form.decision_tree_id || undefined,
       });
       setForm({ ...defaultForm });
       setShowForm(false);
@@ -280,6 +294,13 @@ export default function JobsPage() {
         </div>
         {canEdit && (
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowScrape(true)}
+              className="flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              <Globe className="h-4 w-4" />
+              Scrape Jobs
+            </button>
             <button
               onClick={() => setShowImport(true)}
               className="flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
@@ -420,7 +441,7 @@ export default function JobsPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label htmlFor="job-title" className="block text-sm font-medium text-slate-700 mb-1">
                 Job Title
@@ -449,6 +470,26 @@ export default function JobsPage() {
                 <option value="technical">Technical</option>
                 <option value="non_technical">Non-Technical</option>
                 <option value="mixed">Mixed</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="decision-tree" className="block text-sm font-medium text-slate-700 mb-1">
+                Decision Tree (optional)
+              </label>
+              <select
+                id="decision-tree"
+                value={form.decision_tree_id}
+                onChange={(e) => setForm({ ...form, decision_tree_id: e.target.value })}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+              >
+                <option value="">None</option>
+                {decisionTrees
+                  .filter((t) => t.is_published && (!t.role_type || t.role_type === form.role_type))
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
               </select>
             </div>
           </div>
@@ -881,6 +922,12 @@ export default function JobsPage() {
       <ImportJobsModal
         open={showImport}
         onClose={() => setShowImport(false)}
+        onImported={loadJobs}
+      />
+
+      <ScrapeJobsModal
+        open={showScrape}
+        onClose={() => setShowScrape(false)}
         onImported={loadJobs}
       />
 

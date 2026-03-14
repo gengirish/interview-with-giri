@@ -323,6 +323,31 @@ async def generate_report(
     return _to_response(report, session.candidate_name, session.overall_score)
 
 
+@router.get("/{report_id}/engagement")
+async def get_engagement(
+    report_id: UUID,
+    user: dict = Depends(require_role("admin", "hiring_manager", "viewer")),
+    db: AsyncSession = Depends(get_db),
+    org_id: UUID = Depends(get_org_id),
+):
+    """Get engagement profile for a report."""
+    result = await db.execute(
+        select(CandidateReport).where(CandidateReport.id == report_id)
+    )
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+    session_result = await db.execute(
+        select(InterviewSession).where(
+            InterviewSession.id == report.session_id,
+            InterviewSession.org_id == org_id,
+        )
+    )
+    if not session_result.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found")
+    return {"engagement_profile": report.engagement_profile or {}}
+
+
 @router.get("/{session_id}", response_model=CandidateReportResponse)
 async def get_report(
     session_id: UUID,

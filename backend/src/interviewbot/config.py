@@ -51,6 +51,13 @@ class Settings(BaseSettings):
     judge0_api_url: str = "https://judge0-ce.p.rapidapi.com"
     judge0_rapidapi_key: str = ""
 
+    # RapidAPI (shared key across all subscribed APIs; falls back to judge0 key)
+    rapidapi_key: str = ""
+
+    @property
+    def effective_rapidapi_key(self) -> str:
+        return self.rapidapi_key or self.judge0_rapidapi_key
+
     # Storage
     s3_bucket_name: str = "interviewbot-media"
     aws_access_key_id: str = ""

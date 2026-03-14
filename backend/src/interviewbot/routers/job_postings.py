@@ -18,8 +18,12 @@ from interviewbot.models.schemas import (
     JobPostingCreateRequest,
     JobPostingResponse,
     JobPostingUpdateRequest,
+    JobScrapeRequest,
+    JobScrapeResponse,
     PaginatedResponse,
     RoleType,
+    ScrapedJobImportRequest,
+    ScrapedJobImportResult,
 )
 from interviewbot.models.tables import InterviewSession, JobPosting, Organization
 
@@ -61,6 +65,7 @@ async def create_job_posting(
         interview_format=req.interview_format.value,
         interview_config=req.interview_config.model_dump(),
         scoring_rubric=req.scoring_rubric,
+        decision_tree_id=req.decision_tree_id,
     )
     db.add(posting)
     await db.commit()
@@ -179,6 +184,7 @@ async def generate_interview_link(
         candidate_name=body.candidate_name if body else None,
         candidate_email=body.candidate_email if body else None,
         scheduled_at=body.scheduled_at if body else None,
+        decision_tree_id=posting.decision_tree_id,
     )
     db.add(session)
     await db.commit()
@@ -408,6 +414,128 @@ async def download_import_template(
     }
 
 
+@router.post("/scrape", response_model=JobScrapeResponse)
+async def scrape_jobs(
+    req: JobScrapeRequest,
+    user: dict = Depends(require_role("admin", "hiring_manager")),
+) -> JobScrapeResponse:
+    """Search external job boards for postings to import."""
+    from interviewbot.services.job_scraper import JobScraper, JobScraperError
+
+    try:
+        scraper = JobScraper()
+        jobs = await scraper.search_jobs(
+            search_terms=req.search_terms,
+            location=req.location,
+            page=req.page,
+        )
+    except JobScraperError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+    return JobScrapeResponse(
+        query=req.search_terms,
+        location=req.location,
+        total_results=len(jobs),
+        jobs=jobs,
+    )
+
+
+@router.post("/scrape/import", response_model=ScrapedJobImportResult)
+async def import_scraped_jobs(
+    req: ScrapedJobImportRequest,
+    user: dict = Depends(require_role("admin", "hiring_manager")),
+    db: AsyncSession = Depends(get_db),
+    org_id: UUID = Depends(get_org_id),
+) -> ScrapedJobImportResult:
+    """Import selected scraped jobs as job postings in the system."""
+    results: list[dict] = []
+    created_count = 0
+
+    for idx, job in enumerate(req.jobs):
+        description = job.job_description or job.snippet
+        if not description or len(description.strip()) < 10:
+            description = (
+                f"Position: {job.job_title}\n"
+                f"Company: {job.company_name}\n"
+                f"Location: {job.location}\n\n"
+                f"{job.snippet or 'No description available.'}"
+            )
+
+        header = (
+            f"Company: {job.company_name}\n"
+            f"Location: {job.location}\n"
+            f"Posted: {job.posted_date}\n"
+            f"Source: {job.job_url}\n\n"
+        )
+        full_description = header + description
+        if len(full_description) < 50:
+            full_description = full_description.ljust(50, " ")
+
+        try:
+            posting = JobPosting(
+                org_id=org_id,
+                title=job.job_title[:255],
+                role_type=req.role_type.value,
+                job_description=full_description,
+                required_skills=[],
+                interview_format=req.interview_format.value,
+                interview_config=req.interview_config.model_dump(),
+            )
+            db.add(posting)
+            created_count += 1
+            results.append({"index": idx, "title": job.job_title, "status": "created"})
+        except Exception as exc:
+            results.append(
+                {"index": idx, "title": job.job_title, "status": "error", "error": str(exc)}
+            )
+
+    if created_count > 0:
+        await db.commit()
+
+    if req.auto_extract_skills and created_count > 0:
+        import contextlib
+        import json as json_mod
+
+        from interviewbot.services.ai_engine import SKILL_EXTRACTION_PROMPT, AIEngine
+
+        engine = AIEngine()
+        for result_item in results:
+            if result_item.get("status") != "created":
+                continue
+            title = result_item["title"]
+            stmt = select(JobPosting).where(
+                JobPosting.org_id == org_id,
+                JobPosting.title == title,
+            ).order_by(JobPosting.created_at.desc()).limit(1)
+            row = await db.execute(stmt)
+            posting = row.scalar_one_or_none()
+            if not posting:
+                continue
+            with contextlib.suppress(Exception):
+                prompt = SKILL_EXTRACTION_PROMPT.format(
+                    job_description=posting.job_description[:3000]
+                )
+                raw = await engine.chat(
+                    [{"role": "user", "content": prompt}], temperature=0.3
+                )
+                cleaned = raw.strip()
+                if cleaned.startswith("```"):
+                    cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0]
+                parsed = json_mod.loads(cleaned)
+                skills = parsed.get("technical_skills", []) + parsed.get("soft_skills", [])
+                if skills:
+                    posting.required_skills = skills
+                    result_item["extracted_skills"] = skills
+        await db.commit()
+
+    return ScrapedJobImportResult(
+        total=len(req.jobs),
+        created=created_count,
+        errors=len(req.jobs) - created_count,
+        results=results,
+    )
+
+
 async def _get_posting_or_404(db: AsyncSession, org_id: UUID, posting_id: UUID) -> JobPosting:
     result = await db.execute(
         select(JobPosting).where(
@@ -433,5 +561,6 @@ def _to_response(posting: JobPosting) -> JobPostingResponse:
         interview_config=posting.interview_config or {},
         scoring_rubric=posting.scoring_rubric,
         is_active=posting.is_active,
+        decision_tree_id=posting.decision_tree_id,
         created_at=posting.created_at,
     )
