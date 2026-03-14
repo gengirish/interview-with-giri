@@ -142,6 +142,7 @@ filterwarnings = [
     "ignore::DeprecationWarning:jose",
     "ignore::DeprecationWarning:httpx",
     "ignore::DeprecationWarning:pytest_asyncio",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
 ]
 
 [tool.coverage.run]
