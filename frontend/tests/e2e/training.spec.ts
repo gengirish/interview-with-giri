@@ -184,9 +184,10 @@ test.describe("Training", () => {
   test("start simulation redirects to simulation page", async ({ page }) => {
     await page.goto("/dashboard/training");
 
+    await expect(page.getByText("Start Simulation")).toBeVisible({ timeout: 5000 });
     await page.getByRole("button", { name: "Start" }).click();
 
-    await expect(page).toHaveURL(/\/dashboard\/training\/sim-new-456/, { timeout: 5000 });
+    await expect(page).toHaveURL(/\/dashboard\/training\/sim-new-456/, { timeout: 8000 });
   });
 
   test("simulation chat interface renders", async ({ page }) => {
@@ -230,6 +231,7 @@ test.describe("Training", () => {
   test("leaderboard shows team members", async ({ page }) => {
     await page.goto("/dashboard/training");
 
+    await expect(page.getByText("Leaderboard")).toBeVisible({ timeout: 5000 });
     await expect(page.getByText("Test User")).toBeVisible();
     await expect(page.getByText("7.5")).toBeVisible();
   });

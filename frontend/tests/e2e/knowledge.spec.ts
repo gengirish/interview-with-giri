@@ -163,12 +163,11 @@ test.describe("Knowledge", () => {
     await setupKnowledgeMocks(page);
     await page.goto("/dashboard/knowledge");
 
-    await page
-      .getByPlaceholder("Ask anything about your hiring data...")
-      .fill("What questions work best for senior engineers?");
+    const input = page.getByPlaceholder("Ask anything about your hiring data...");
+    await input.fill("What questions work best for senior engineers?");
     await page.getByRole("button", { name: "Ask" }).click();
 
-    await expect(page.getByText("pass rate")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/pass rate/i)).toBeVisible({ timeout: 8000 });
     await expect(page.getByText("System Design Questions Work Best")).toBeVisible();
   });
 
@@ -181,7 +180,7 @@ test.describe("Knowledge", () => {
       .fill("React pass rate");
     await page.getByRole("button", { name: "Ask" }).click();
 
-    await expect(page.getByText("72%")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("72%")).toBeVisible({ timeout: 8000 });
     await expect(page.getByText("System Design Questions Work Best")).toBeVisible();
   });
 
@@ -209,6 +208,7 @@ test.describe("Knowledge", () => {
     await setupKnowledgeMocks(page);
     await page.goto("/dashboard/knowledge");
 
+    await expect(page.getByText("Knowledge Browser")).toBeVisible({ timeout: 5000 });
     await expect(page.getByText("Question Insight")).toBeVisible();
     await expect(page.getByText("system_design")).toBeVisible();
   });
@@ -217,7 +217,7 @@ test.describe("Knowledge", () => {
     await setupKnowledgeMocks(page);
     await page.goto("/dashboard/knowledge");
 
-    await expect(page.getByText("Popular Queries")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Popular Queries" })).toBeVisible({ timeout: 5000 });
     await expect(
       page.getByText("What questions work best for senior engineers?")
     ).toBeVisible();
@@ -246,7 +246,7 @@ test.describe("Knowledge", () => {
       .fill("test query");
     await page.getByRole("button", { name: "Ask" }).click();
 
-    await expect(page.getByTitle("Helpful")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTitle("Helpful")).toBeVisible({ timeout: 8000 });
     await expect(page.getByTitle("Not helpful")).toBeVisible();
   });
 

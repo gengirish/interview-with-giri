@@ -241,7 +241,7 @@ test.describe("Clips", () => {
       const url = route.request().url();
       const method = route.request().method();
 
-      if (url.match(/\/interviews\/sess-1$/) && !url.includes("/messages") && !url.includes("/comments")) {
+      if (url.includes("/interviews/sess-1") && !url.includes("/messages") && !url.includes("/comments")) {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -310,7 +310,8 @@ test.describe("Clips", () => {
     await expect(page.getByText("Exceptional System Design Answer")).toBeVisible();
   });
 
-  test("share link copies to clipboard", async ({ page }) => {
+  test("share link copies to clipboard", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await setupClipsMocks(page);
     await page.goto("/dashboard/clips");
 

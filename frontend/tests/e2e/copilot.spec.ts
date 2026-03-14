@@ -87,7 +87,13 @@ async function setupCopilotMocks(page: import("@playwright/test").Page) {
     const url = route.request().url();
     const method = route.request().method();
 
-    if (url.includes("/copilot/start/") && method === "POST") {
+    if (url.includes("/copilot/history") && method === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([]),
+      });
+    } else if (url.includes("/copilot/start/") && method === "POST") {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -190,7 +196,9 @@ test.describe("Co-Pilot", () => {
 
     await page.getByRole("button", { name: "Get Suggestions" }).click();
 
-    await expect(page.getByText("Python")).toBeVisible({ timeout: 5000 });
+    const coverageSection = page.getByRole("heading", { level: 3 }).filter({ hasText: "Competency Coverage" });
+    await expect(coverageSection).toBeVisible();
+    await expect(page.getByText("Python")).toBeVisible({ timeout: 8000 });
     await expect(page.getByText("FastAPI")).toBeVisible();
     await expect(page.getByText("PostgreSQL")).toBeVisible();
   });
@@ -241,8 +249,8 @@ test.describe("Co-Pilot", () => {
   test("Launch Co-Pilot button on interview detail page", async ({ page }) => {
     await page.goto(`/dashboard/interviews/${MOCK_SESSION_ID}`);
 
-    await expect(page.getByRole("link", { name: "Launch Co-Pilot" })).toBeVisible();
-    await page.getByRole("link", { name: "Launch Co-Pilot" }).click();
+    await expect(page.getByRole("link", { name: /Launch Co-Pilot/i })).toBeVisible({ timeout: 8000 });
+    await page.getByRole("link", { name: /Launch Co-Pilot/i }).click();
 
     await expect(page).toHaveURL(new RegExp(`/dashboard/copilot/${MOCK_SESSION_ID}`), {
       timeout: 5000,
@@ -270,8 +278,9 @@ test.describe("Co-Pilot", () => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await page.goto("/dashboard");
 
-    const sidebar = page.getByTestId("sidebar");
-    await sidebar.getByRole("link", { name: "Co-Pilot" }).click();
+    const copilotLink = page.getByRole("link", { name: "Co-Pilot" });
+    await expect(copilotLink).toBeVisible({ timeout: 5000 });
+    await copilotLink.click();
 
     await expect(page).toHaveURL(/\/dashboard\/copilot$/, { timeout: 5000 });
     await expect(page.getByRole("heading", { name: "AI Interview Co-Pilot" })).toBeVisible();

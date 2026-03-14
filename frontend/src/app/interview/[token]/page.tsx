@@ -392,6 +392,15 @@ function InterviewContent() {
   const [feedbackComment, setFeedbackComment] = useState("");
 
   const [showAccessibilityModal, setShowAccessibilityModal] = useState(false);
+
+  useEffect(() => {
+    if (!showAccessibilityModal) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowAccessibilityModal(false);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [showAccessibilityModal]);
   const [accessibilityPrefs, setAccessibilityPrefs] = useState<AccessibilityConfig>({
     mode: "standard",
     preferences: {

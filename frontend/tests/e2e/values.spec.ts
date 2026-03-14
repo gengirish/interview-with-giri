@@ -81,6 +81,12 @@ async function setupValuesMocks(
         contentType: "application/json",
         body: JSON.stringify(MOCK_SUBSCRIPTION),
       });
+    } else if (url.includes("/billing/plans")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([]),
+      });
     } else if (url.includes("/values") && !url.includes("/assess/") && !url.includes("/assessment/") && !url.includes("/generate-questions") && !url.includes("/org-trends")) {
       if (method === "GET") {
         await route.fulfill({
@@ -141,10 +147,51 @@ async function setupValuesMocks(
   });
 }
 
+const LS_WALKTHROUGH = "walkthrough_progress";
+
+/** Skip the settings-page walkthrough so the joyride overlay doesn't block clicks. */
+async function skipSettingsWalkthrough(page: import("@playwright/test").Page) {
+  await page.evaluate((key) => {
+    const raw = localStorage.getItem(key);
+    let state: { completed: Record<string, boolean>; skipped: Record<string, boolean>; version: number } = {
+      completed: {},
+      skipped: {},
+      version: 1,
+    };
+    try {
+      if (raw) state = { ...state, ...JSON.parse(raw) };
+    } catch {
+      /* ignore */
+    }
+    state.skipped = { ...state.skipped, "settings-page": true };
+    localStorage.setItem(key, JSON.stringify(state));
+  }, LS_WALKTHROUGH);
+}
+
+/** Skip the interview-detail walkthrough so the joyride overlay doesn't block clicks. */
+async function skipInterviewDetailWalkthrough(page: import("@playwright/test").Page) {
+  await page.evaluate((key) => {
+    const raw = localStorage.getItem(key);
+    let state: { completed: Record<string, boolean>; skipped: Record<string, boolean>; version: number } = {
+      completed: {},
+      skipped: {},
+      version: 1,
+    };
+    try {
+      if (raw) state = { ...state, ...JSON.parse(raw) };
+    } catch {
+      /* ignore */
+    }
+    state.skipped = { ...state.skipped, "interview-detail": true };
+    localStorage.setItem(key, JSON.stringify(state));
+  }, LS_WALKTHROUGH);
+}
+
 test.describe("Company Values", () => {
   test.beforeEach(async ({ page }) => {
     await setupDashboardMocks(page);
     await setAuthState(page);
+    await skipSettingsWalkthrough(page);
   });
 
   test("values section in settings renders", async ({ page }) => {
@@ -152,7 +199,7 @@ test.describe("Company Values", () => {
     await page.goto("/dashboard/settings");
 
     await page.getByRole("tab", { name: "Company Values" }).click();
-    await expect(page.getByText("Company Values")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Company Values" })).toBeVisible();
     await expect(page.getByText("Define your organization")).toBeVisible();
   });
 
@@ -229,6 +276,7 @@ test.describe("Cultural Fit tab on interview detail", () => {
   test.beforeEach(async ({ page }) => {
     await setupDashboardMocks(page);
     await setAuthState(page);
+    await skipInterviewDetailWalkthrough(page);
   });
 
   test("cultural fit tab visible and navigates", async ({ page }) => {
@@ -254,7 +302,9 @@ test.describe("Cultural Fit tab on interview detail", () => {
         await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
       } else if (url.includes("/reports/sess-1/comments")) {
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
-      } else if (url.includes("/users/org-members") || url.includes("/users/me")) {
+      } else if (
+        (url.includes("/users/org-members") || (url.includes("/users/me") && !url.includes("/walkthrough")))
+      ) {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -275,8 +325,8 @@ test.describe("Cultural Fit tab on interview detail", () => {
     await page.goto("/dashboard/interviews/sess-1");
 
     await page.getByRole("tab", { name: "Cultural Fit" }).click();
-    await expect(page.getByText("Cultural Fit")).toBeVisible();
-    await expect(page.getByText("No cultural fit assessment yet")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Cultural Fit", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "No cultural fit assessment yet" })).toBeVisible();
   });
 
   test("run assessment button and results", async ({ page }) => {
@@ -316,7 +366,9 @@ test.describe("Cultural Fit tab on interview detail", () => {
         await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
       } else if (url.includes("/reports/sess-1/comments")) {
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
-      } else if (url.includes("/users/org-members") || url.includes("/users/me")) {
+      } else if (
+        (url.includes("/users/org-members") || (url.includes("/users/me") && !url.includes("/walkthrough")))
+      ) {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -372,7 +424,9 @@ test.describe("Cultural Fit tab on interview detail", () => {
         await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
       } else if (url.includes("/reports/sess-1/comments")) {
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([]) });
-      } else if (url.includes("/users/org-members") || url.includes("/users/me")) {
+      } else if (
+        (url.includes("/users/org-members") || (url.includes("/users/me") && !url.includes("/walkthrough")))
+      ) {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -394,8 +448,9 @@ test.describe("Cultural Fit tab on interview detail", () => {
     await page.getByRole("tab", { name: "Cultural Fit" }).click();
 
     await expect(page.getByText("Good Fit")).toBeVisible();
-    await expect(page.getByText("Ownership")).toBeVisible();
-    await expect(page.getByText("Integrity")).toBeVisible();
+    // Use button selectors to avoid strict mode (Ownership/Integrity appear in radar chart and evidence cards)
+    await expect(page.getByRole("button", { name: /Ownership/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Integrity/ })).toBeVisible();
     // Click to expand first evidence card
     await page.getByRole("button", { name: /Ownership/ }).click();
     await expect(page.getByText("Candidate described taking initiative on the migration project.")).toBeVisible();

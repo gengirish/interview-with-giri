@@ -16,6 +16,7 @@ import {
   Trash2,
   Sparkles,
   Accessibility,
+  Heart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -334,6 +335,7 @@ export default function SettingsPage() {
   const tabs = [
     { id: "billing", label: "Billing", icon: CreditCard },
     { id: "branding", label: "Branding", icon: Palette },
+    { id: "values", label: "Company Values", icon: Heart },
     { id: "email", label: "Email", icon: Mail },
     { id: "webhooks", label: "Webhooks", icon: Link2 },
     { id: "notifications", label: "Notifications", icon: Bell },

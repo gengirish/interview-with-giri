@@ -829,6 +829,20 @@ export default function InterviewDetailPage() {
         </button>
         <button
           role="tab"
+          aria-selected={activeTab === "engagement"}
+          onClick={() => setActiveTab("engagement")}
+          className={cn(
+            "flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+            activeTab === "engagement"
+              ? "bg-white text-slate-900 shadow-sm"
+              : "text-slate-600 hover:text-slate-900",
+          )}
+        >
+          <Activity className="h-4 w-4" />
+          Engagement
+        </button>
+        <button
+          role="tab"
           aria-selected={activeTab === "values"}
           onClick={() => setActiveTab("values")}
           className={cn(

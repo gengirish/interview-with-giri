@@ -176,6 +176,7 @@ test.describe("Predictions dashboard", () => {
     await setupPredictionsMocks(page, { status: MOCK_PREDICTION_STATUS_WITH_MODEL });
     await page.goto("/dashboard/predictions");
 
+    await expect(page.getByTestId("model-health-card")).toBeVisible({ timeout: 5000 });
     await expect(page.getByText("15")).toBeVisible();
     await expect(page.getByText("78%")).toBeVisible();
     await expect(page.getByRole("button", { name: "Retrain" })).toBeVisible();

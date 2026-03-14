@@ -46,8 +46,11 @@ test.describe("Decision Trees", () => {
     await setupDashboardMocks(page, { decisionTrees: [] });
     await setAuthState(page);
     await page.goto("/dashboard/decision-trees");
+
+    await expect(page.getByRole("heading", { name: "Decision Trees" })).toBeVisible();
     await page.getByRole("button", { name: "Create New" }).click();
 
+    await expect(page.getByRole("heading", { name: "Create Decision Tree" })).toBeVisible({ timeout: 3000 });
     await expect(page.getByLabel("Name")).toBeVisible();
     await expect(page.getByLabel("Role Type")).toBeVisible();
     await expect(page.getByLabel("Description")).toBeVisible();

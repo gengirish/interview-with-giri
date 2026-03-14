@@ -110,8 +110,10 @@ export default function ClipsPage() {
         {showFilters && (
           <div className="mt-4 flex flex-wrap gap-4">
             <div className="flex items-center gap-2">
-              <label className="text-xs text-slate-500">Type</label>
+              <label htmlFor="filter-type" className="text-xs text-slate-500">Type</label>
               <select
+                id="filter-type"
+                aria-label="Type"
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
                 className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm"

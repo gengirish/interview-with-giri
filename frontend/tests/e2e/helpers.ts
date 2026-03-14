@@ -190,6 +190,22 @@ export async function setupDashboardMocks(page: Page, options?: {
       });
     } else if (url.includes("/job-postings") && !url.includes("/extract-skills")) {
       if (method === "GET") {
+        const idMatch = url.match(/\/job-postings\/([^/]+)(?:\?|$)/);
+        if (idMatch) {
+          const jobId = idMatch[1];
+          const jobList = Array.isArray((jobs as { items?: unknown[] }).items)
+            ? (jobs as { items: { id: string }[] }).items
+            : [];
+          const single = jobList.find((j) => j.id === jobId) ?? (jobs as { items?: { id: string }[] }).items?.[0];
+          if (single) {
+            await route.fulfill({
+              status: 200,
+              contentType: "application/json",
+              body: JSON.stringify(single),
+            });
+            return;
+          }
+        }
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -208,6 +224,22 @@ export async function setupDashboardMocks(page: Page, options?: {
         await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
       }
     } else if (url.includes("/interviews") && !url.includes("/public/")) {
+      const idMatch = url.match(/\/interviews\/([^/]+)(?:\/|$)/);
+      if (idMatch && !url.includes("/messages") && !url.includes("/comments")) {
+        const id = idMatch[1];
+        const items = Array.isArray((interviews as { items?: unknown[] }).items)
+          ? (interviews as { items: { id: string }[] }).items
+          : [];
+        const single = items.find((i) => i.id === id);
+        if (single) {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(single),
+          });
+          return;
+        }
+      }
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -241,6 +273,19 @@ export async function setupDashboardMocks(page: Page, options?: {
       } else {
         await route.fulfill({ status: 404, contentType: "application/json", body: "{}" });
       }
+    } else if (url.includes("/users/me") && !url.includes("/walkthrough")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "user-1",
+          email: "admin@test.com",
+          full_name: "Admin",
+          role: "admin",
+          is_active: true,
+          created_at: "2026-01-01T00:00:00Z",
+        }),
+      });
     } else if (url.includes("/users") && !url.includes("/me")) {
       await route.fulfill({
         status: 200,

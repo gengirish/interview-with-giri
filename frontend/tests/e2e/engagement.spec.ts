@@ -87,6 +87,27 @@ const MOCK_MESSAGES = [
   },
 ];
 
+const LS_WALKTHROUGH = "walkthrough_progress";
+
+/** Skip the interview-detail walkthrough so the joyride overlay doesn't block clicks. */
+async function skipInterviewDetailWalkthrough(page: import("@playwright/test").Page) {
+  await page.evaluate(() => {
+    const raw = localStorage.getItem(LS_WALKTHROUGH);
+    let state: { completed: Record<string, boolean>; skipped: Record<string, boolean>; version: number } = {
+      completed: {},
+      skipped: {},
+      version: 1,
+    };
+    try {
+      if (raw) state = { ...state, ...JSON.parse(raw) };
+    } catch {
+      /* ignore */
+    }
+    state.skipped = { ...state.skipped, "interview-detail": true };
+    localStorage.setItem(LS_WALKTHROUGH, JSON.stringify(state));
+  });
+}
+
 async function setupEngagementMocks(page: import("@playwright/test").Page) {
   await page.route(API_PATTERN, async (route) => {
     const url = route.request().url();
@@ -171,6 +192,16 @@ async function setupEngagementMocks(page: import("@playwright/test").Page) {
         contentType: "application/json",
         body: JSON.stringify([]),
       });
+    } else if (url.includes("/users/me/walkthrough")) {
+      if (method === "GET" || method === "PATCH") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ completed: {}, skipped: {}, version: 1 }),
+        });
+      } else {
+        await route.continue();
+      }
     } else if (url.includes("/users/me")) {
       await route.fulfill({
         status: 200,
@@ -213,6 +244,7 @@ test.describe("Engagement", () => {
   test.beforeEach(async ({ page }) => {
     await setupEngagementMocks(page);
     await setAuthState(page);
+    await skipInterviewDetailWalkthrough(page);
   });
 
   test("Engagement tab is visible on interview detail page", async ({

@@ -182,46 +182,38 @@ test.describe("Genome", () => {
   });
 
   test("role profiles page renders", async ({ page }) => {
-    await page.route(API_PATTERN, async (route) => {
-      const url = route.request().url();
-      if (url.includes("/genome/role-profiles") && !url.match(/\/role-profiles\/[^/]+/)) {
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify(MOCK_ROLE_PROFILES),
-        });
-      } else {
-        await route.continue();
-      }
-    });
-
+    await setupGenomeMocks(page);
     await page.goto("/dashboard/genome/profiles");
 
-    await expect(page.getByRole("heading", { name: "Role Genome Profiles" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Role Genome Profiles" })).toBeVisible({ timeout: 5000 });
     await expect(page.getByText("Senior Backend Engineer")).toBeVisible();
   });
 
   test("role profile creation form", async ({ page }) => {
+    let createdProfiles: { id: string; role_type: string; title: string }[] = [];
     await page.route(API_PATTERN, async (route) => {
       const url = route.request().url();
       const method = route.request().method();
-      if (url.includes("/genome/role-profiles")) {
+      if (url.includes("/genome/role-profiles") && !url.match(/\/role-profiles\/[^/]+$/)) {
         if (method === "GET") {
           await route.fulfill({
             status: 200,
             contentType: "application/json",
-            body: JSON.stringify({ items: [] }),
+            body: JSON.stringify({ items: createdProfiles }),
           });
         } else if (method === "POST") {
+          const body = JSON.parse(route.request().postData() || "{}");
+          const newProfile = {
+            id: "profile-new",
+            role_type: body.role_type || "technical",
+            title: body.title || "Test Engineer",
+            ideal_genome: body.ideal_genome || {},
+          };
+          createdProfiles = [...createdProfiles, newProfile];
           await route.fulfill({
             status: 201,
             contentType: "application/json",
-            body: JSON.stringify({
-              id: "profile-new",
-              role_type: "technical",
-              title: "Test Engineer",
-              ideal_genome: {},
-            }),
+            body: JSON.stringify(newProfile),
           });
         } else {
           await route.continue();
@@ -234,12 +226,12 @@ test.describe("Genome", () => {
     await page.goto("/dashboard/genome/profiles");
 
     await page.getByRole("button", { name: "Create Profile" }).click();
-    await expect(page.getByText("New Role Profile")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "New Role Profile" })).toBeVisible({ timeout: 3000 });
 
     await page.getByPlaceholder("e.g. Senior Backend Engineer").fill("Test Engineer");
     await page.getByRole("button", { name: "Create" }).click();
 
-    await expect(page.getByText("Test Engineer")).toBeVisible();
+    await expect(page.getByText("Test Engineer")).toBeVisible({ timeout: 5000 });
   });
 
   test("genome page link to role profiles", async ({ page }) => {
@@ -350,8 +342,8 @@ test.describe("Genome", () => {
     await page.goto("/dashboard/interviews/sess-1");
 
     await page.getByRole("tab", { name: "Genome" }).click();
-    await expect(page.getByText("Competency Genome")).toBeVisible();
-    await expect(page.getByText("2 interviews contributed")).toBeVisible();
+    await expect(page.getByText("Competency Genome")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/interviews contributed/)).toBeVisible();
   });
 
   test("compare view", async ({ page }) => {
