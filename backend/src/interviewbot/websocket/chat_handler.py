@@ -33,6 +33,16 @@ def _extract_code(message: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
+_DIFFICULTY_RE = re.compile(r"<!--DIFFICULTY:(\w+)-->\s*")
+
+
+def strip_difficulty_tag(text: str) -> tuple[str, str]:
+    """Strip the <!--DIFFICULTY:xxx--> tag from AI output. Returns (cleaned_text, difficulty)."""
+    match = _DIFFICULTY_RE.search(text)
+    difficulty = match.group(1) if match else "medium"
+    return _DIFFICULTY_RE.sub("", text), difficulty
+
+
 class FollowUpTracker:
     """Tracks follow-up depth to ensure multi-level probing."""
 
@@ -304,10 +314,7 @@ async def _process_candidate_message(
 
     response = await engine.chat(conversation.get_messages())
 
-    # Parse difficulty tag and track progression
-    difficulty_match = re.search(r"<!--DIFFICULTY:(\w+)-->", response)
-    current_difficulty = difficulty_match.group(1) if difficulty_match else "medium"
-    response = re.sub(r"<!--DIFFICULTY:\w+-->\s*", "", response)
+    response, current_difficulty = strip_difficulty_tag(response)
 
     progression = session.difficulty_progression or []
     progression.append(
@@ -405,10 +412,7 @@ async def handle_text_interview(websocket: WebSocket, token: str, db: AsyncSessi
 
     try:
         first_question = await engine.chat(conversation.get_messages())
-        # Parse and strip difficulty tag from first question
-        difficulty_match = re.search(r"<!--DIFFICULTY:(\w+)-->", first_question)
-        current_difficulty = difficulty_match.group(1) if difficulty_match else "medium"
-        first_question = re.sub(r"<!--DIFFICULTY:\w+-->\s*", "", first_question)
+        first_question, current_difficulty = strip_difficulty_tag(first_question)
 
         progression = session.difficulty_progression or []
         progression.append({"question": 1, "difficulty": current_difficulty})

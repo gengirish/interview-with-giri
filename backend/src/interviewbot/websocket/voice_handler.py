@@ -16,7 +16,11 @@ from interviewbot.routers.webhooks import dispatch_webhook
 from interviewbot.services.ai_engine import AIEngine, InterviewConversation
 from interviewbot.services.notifications import send_interview_completed
 from interviewbot.services.voice_pipeline import VoiceInterviewPipeline
-from interviewbot.websocket.chat_handler import _build_system_prompt, _save_message
+from interviewbot.websocket.chat_handler import (
+    _build_system_prompt,
+    _save_message,
+    strip_difficulty_tag,
+)
 
 logger = structlog.get_logger()
 
@@ -68,6 +72,7 @@ async def handle_voice_interview(websocket: WebSocket, token: str, db: AsyncSess
 
     try:
         first_question = await engine.chat(conversation.get_messages())
+        first_question, _ = strip_difficulty_tag(first_question)
         conversation.add_message("assistant", first_question)
         await _save_message(db, session.id, "interviewer", first_question)
 
@@ -116,6 +121,7 @@ async def handle_voice_interview(websocket: WebSocket, token: str, db: AsyncSess
                 )
 
                 response = await engine.chat(conversation.get_messages())
+                response, _ = strip_difficulty_tag(response)
                 conversation.add_message("assistant", response)
                 await _save_message(db, session.id, "interviewer", response)
 
@@ -166,6 +172,7 @@ async def handle_voice_interview(websocket: WebSocket, token: str, db: AsyncSess
                 await websocket.send_json({"type": "thinking"})
 
                 response = await engine.chat(conversation.get_messages())
+                response, _ = strip_difficulty_tag(response)
                 conversation.add_message("assistant", response)
                 await _save_message(db, session.id, "interviewer", response)
 
