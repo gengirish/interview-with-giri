@@ -13,10 +13,18 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "interview_session",
-        sa.Column("accessibility_config", JSONB, nullable=True),
+    conn = op.get_bind()
+    result = conn.execute(
+        sa.text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'interview_session' AND column_name = 'accessibility_config'"
+        )
     )
+    if not result.fetchone():
+        op.add_column(
+            "interview_session",
+            sa.Column("accessibility_config", JSONB, nullable=True),
+        )
 
 
 def downgrade() -> None:
