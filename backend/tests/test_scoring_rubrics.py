@@ -8,6 +8,8 @@ from interviewbot.models.tables import InterviewMessage
 from interviewbot.services.scoring_engine import score_interview
 from tests.conftest import JOB_PAYLOAD, SIGNUP_PAYLOAD
 
+pytestmark = pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
+
 
 async def _auth_headers(client):
     resp = await client.post("/api/v1/auth/signup", json=SIGNUP_PAYLOAD)

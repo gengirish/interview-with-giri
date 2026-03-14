@@ -53,7 +53,7 @@ async def test_send_email_success():
             return_value=MagicMock(agentmail_api_key="am_test"),
         ),
         patch(
-            "interviewbot.services.agentmail_client.AgentMail",
+            "agentmail.AgentMail",
             return_value=mock_client,
         ),
     ):
@@ -77,7 +77,7 @@ async def test_create_org_inbox_success():
             ),
         ),
         patch(
-            "interviewbot.services.agentmail_client.AgentMail",
+            "agentmail.AgentMail",
             return_value=mock_client,
         ),
     ):

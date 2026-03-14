@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 import uuid
 
 import structlog
@@ -22,7 +22,7 @@ def generate_ics_invite(
     """Generate an .ics calendar invite string."""
     end_time = start_time + timedelta(minutes=duration_minutes)
     uid = str(uuid.uuid4())
-    now = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    now = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     start_str = start_time.strftime("%Y%m%dT%H%M%SZ")
     end_str = end_time.strftime("%Y%m%dT%H%M%SZ")
 

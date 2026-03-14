@@ -79,7 +79,8 @@ const MOCK_MESSAGES = [
 async function setupInterviewDetailMocks(page: import("@playwright/test").Page, options?: {
   comments?: typeof MOCK_COMMENTS;
 }) {
-  const comments = options?.comments ?? MOCK_COMMENTS;
+  const initialComments = options?.comments ?? MOCK_COMMENTS;
+  let comments = [...initialComments];
 
   await page.route(API_PATTERN, async (route) => {
     const url = route.request().url();
@@ -122,6 +123,7 @@ async function setupInterviewDetailMocks(page: import("@playwright/test").Page, 
           mentioned_user_ids: [],
           created_at: new Date().toISOString(),
         };
+        comments = [...comments, newComment];
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -221,7 +223,7 @@ test.describe("Team Collaboration - Comments", () => {
 
     await expect(page.getByText("John Admin")).toBeVisible({ timeout: 10000 });
     await expect(page.getByText("Great candidate!")).toBeVisible();
-    await expect(page.getByText("Jan 20")).toBeVisible();
+    await expect(page.getByText("Jan 20").first()).toBeVisible();
   });
 
   test("posting a new comment adds it to the thread", async ({ page }) => {
@@ -230,7 +232,7 @@ test.describe("Team Collaboration - Comments", () => {
     await expect(page.getByRole("heading", { name: "Team Discussion" })).toBeVisible({
       timeout: 10000,
     });
-    const textarea = page.getByPlaceholder("Add a comment...");
+    const textarea = page.getByPlaceholder(/Add a comment/);
     await expect(textarea).toBeVisible();
     await textarea.fill("This is my new comment");
     await page.getByRole("button", { name: "Post" }).click();

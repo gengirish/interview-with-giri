@@ -51,9 +51,11 @@ test.describe("Jobs", () => {
     await page.goto("/dashboard/jobs");
 
     await page.getByRole("button", { name: /Text Interview Link/i }).click();
+    const modal = page.getByRole("dialog");
+    await modal.getByRole("button", { name: "Generate Link" }).click();
 
     await expect(
-      page.getByRole("button", { name: "Copied!" })
+      page.getByText("Link generated and copied to clipboard")
     ).toBeVisible({ timeout: 5000 });
   });
 

@@ -185,16 +185,16 @@ async def generate_interview_link(
 
     result: dict = {"token": token, "interview_url": f"/interview/{token}"}
 
-    # Send calendar invite if scheduled
-    if body and body.scheduled_at and body.candidate_email:
-        with contextlib.suppress(Exception):
+    # Add scheduled_at whenever set; generate ICS and send invite when candidate_email present
+    if body and body.scheduled_at:
+        result["scheduled_at"] = body.scheduled_at.isoformat()
+        if body.candidate_email:
             from interviewbot.services.calendar_service import generate_ics_invite
-            from interviewbot.services.notifications import send_interview_invitation
 
-            settings = get_settings()
-            interview_url = f"{settings.app_url}/interview/{token}"
             config = posting.interview_config or {}
             duration = config.get("duration_minutes", 30)
+            settings = get_settings()
+            interview_url = f"{settings.app_url}/interview/{token}"
 
             ics_content = generate_ics_invite(
                 summary=f"Interview: {posting.title}",
@@ -205,22 +205,25 @@ async def generate_interview_link(
                 location=interview_url,
             )
             result["ics_content"] = ics_content
-            result["scheduled_at"] = body.scheduled_at.isoformat()
 
-            # Fetch org for invitation email
-            org_result = await db.execute(select(Organization).where(Organization.id == org_id))
-            org = org_result.scalar_one_or_none()
-            org_name = org.name if org else "Company"
-            org_inbox_id = org.agentmail_inbox_id if org else None
+            with contextlib.suppress(Exception):
+                from interviewbot.services.notifications import send_interview_invitation
 
-            await send_interview_invitation(
-                body.candidate_email,
-                body.candidate_name or "Candidate",
-                posting.title,
-                interview_url,
-                org_name=org_name,
-                org_inbox_id=org_inbox_id,
-            )
+                org_result = await db.execute(
+                    select(Organization).where(Organization.id == org_id)
+                )
+                org = org_result.scalar_one_or_none()
+                org_name = org.name if org else "Company"
+                org_inbox_id = org.agentmail_inbox_id if org else None
+
+                await send_interview_invitation(
+                    body.candidate_email,
+                    body.candidate_name or "Candidate",
+                    posting.title,
+                    interview_url,
+                    org_name=org_name,
+                    org_inbox_id=org_inbox_id,
+                )
 
     return result
 

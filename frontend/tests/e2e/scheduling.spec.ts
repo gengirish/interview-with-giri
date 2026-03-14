@@ -44,7 +44,12 @@ async function setupSchedulingMocks(page: import("@playwright/test").Page, optio
           }),
         });
       } else if (url.includes("/generate-link") && method === "POST") {
-        const body = await route.request().postDataJSON().catch(() => ({}));
+        let body: { scheduled_at?: string } = {};
+        try {
+          body = (await route.request().postDataJSON()) ?? {};
+        } catch {
+          body = {};
+        }
         if (body?.scheduled_at) {
           await route.fulfill({
             status: 200,
@@ -72,6 +77,34 @@ async function setupSchedulingMocks(page: import("@playwright/test").Page, optio
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({}),
+      });
+    } else if (url.includes("/users/me/walkthrough")) {
+      if (method === "GET" || method === "PATCH") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ completed: {}, skipped: {}, version: 1 }),
+        });
+      } else {
+        await route.continue();
+      }
+    } else if (url.includes("/users/me")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: "user-1",
+          email: "admin@example.com",
+          full_name: "Admin",
+          role: "admin",
+          is_active: true,
+        }),
+      });
+    } else if (url.includes("/users") && !url.includes("/me")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([]),
       });
     } else {
       await route.fulfill({
@@ -136,6 +169,17 @@ test.describe("Interview Scheduling", () => {
 
   test("generating link with scheduling shows calendar download", async ({ page, context }) => {
     await context.grantPermissions(["clipboard-write"]);
+    await page.goto("/");
+    await page.evaluate(() => {
+      const completed = {
+        "dashboard-overview": true,
+        "jobs-page": true,
+      };
+      localStorage.setItem(
+        "walkthrough_progress",
+        JSON.stringify({ completed, skipped: {}, version: 1 })
+      );
+    });
     await page.goto("/dashboard/jobs");
 
     await page.getByRole("button", { name: /Text Interview Link/i }).click();

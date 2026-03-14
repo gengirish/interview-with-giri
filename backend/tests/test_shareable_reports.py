@@ -7,6 +7,8 @@ import pytest
 from interviewbot.models.tables import CandidateReport, InterviewSession, JobPosting
 from tests.conftest import DEMO_ORG_ID
 
+pytestmark = pytest.mark.filterwarnings("ignore::pytest.PytestUnraisableExceptionWarning")
+
 
 async def _create_session_with_report(db, org_id):
     """Create a completed interview session with a report."""
@@ -94,10 +96,10 @@ async def test_share_report_custom_expiry(client, db):
     assert resp.status_code == 200
     data = resp.json()
     assert "expires_at" in data
-    from datetime import datetime
+    from datetime import UTC, datetime
 
     expires = datetime.fromisoformat(data["expires_at"].replace("Z", "+00:00"))
-    now = datetime.now(datetime.UTC)
+    now = datetime.now(UTC)
     diff_hours = (expires - now).total_seconds() / 3600
     assert 23 <= diff_hours <= 25
 

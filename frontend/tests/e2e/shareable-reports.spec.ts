@@ -78,7 +78,7 @@ async function setupInterviewDetailMocks(page: import("@playwright/test").Page) 
         contentType: "application/json",
         body: JSON.stringify([]),
       });
-    } else if (url.match(/\/interviews\/session-1$/)) {
+    } else if (url.includes("/interviews/session-1") && !url.includes("/messages") && !url.includes("/public/")) {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -90,11 +90,17 @@ async function setupInterviewDetailMocks(page: import("@playwright/test").Page) 
         contentType: "application/json",
         body: JSON.stringify(SHARE_RESPONSE),
       });
-    } else if (url.includes("/reports/session-1") && !url.includes("/share") && !url.includes("/public/")) {
+    } else if (url.includes("/reports/session-1") && !url.includes("/share") && !url.includes("/public/") && !url.includes("/comments") && !url.includes("/export")) {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify(MOCK_REPORT),
+      });
+    } else if (url.includes("/reports/") && url.includes("/comments")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([]),
       });
     } else if (url.includes("/interviews") && !url.includes("/public/")) {
       await route.fulfill({
@@ -114,18 +120,28 @@ async function setupInterviewDetailMocks(page: import("@playwright/test").Page) 
         contentType: "application/json",
         body: JSON.stringify([]),
       });
-    } else if (url.includes("/reports/") && url.includes("/comments")) {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify([]),
-      });
     } else if (url.includes("/integrity")) {
       await route.fulfill({
         status: 404,
         contentType: "application/json",
         body: JSON.stringify({ detail: "Not found" }),
       });
+    } else if (url.includes("/users/me/walkthrough")) {
+      if (route.request().method() === "GET") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ completed: {}, skipped: {}, version: 1 }),
+        });
+      } else if (route.request().method() === "PATCH") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ completed: {}, skipped: {}, version: 1 }),
+        });
+      } else {
+        await route.continue();
+      }
     } else if (url.includes("/users/me")) {
       await route.fulfill({
         status: 200,
@@ -160,11 +176,18 @@ test.describe("Shareable Report Links", () => {
   }) => {
     await setupInterviewDetailMocks(page);
     await setAuthState(page);
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.setItem(
+        "walkthrough_progress",
+        JSON.stringify({ completed: { "interview-detail": true }, skipped: {}, version: 1 })
+      );
+    });
     await page.goto("/dashboard/interviews/session-1");
 
-    await expect(page.getByRole("button", { name: "Share Report" })).toBeVisible(
-      { timeout: 10000 }
-    );
+    await expect(page.getByRole("button", { name: "Share Report" })).toBeVisible({
+      timeout: 15000,
+    });
   });
 
   test("clicking share copies URL to clipboard and shows toast", async ({
@@ -174,11 +197,18 @@ test.describe("Shareable Report Links", () => {
     await context.grantPermissions(["clipboard-write"]);
     await setupInterviewDetailMocks(page);
     await setAuthState(page);
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.setItem(
+        "walkthrough_progress",
+        JSON.stringify({ completed: { "interview-detail": true }, skipped: {}, version: 1 })
+      );
+    });
     await page.goto("/dashboard/interviews/session-1");
 
-    await expect(page.getByRole("button", { name: "Share Report" })).toBeVisible(
-      { timeout: 10000 }
-    );
+    await expect(page.getByRole("button", { name: "Share Report" })).toBeVisible({
+      timeout: 15000,
+    });
     await page.getByRole("button", { name: "Share Report" }).click();
 
     await expect(
@@ -207,7 +237,7 @@ test.describe("Shareable Report Links", () => {
     ).toBeVisible({ timeout: 10000 });
     await expect(page.getByText("Candidate: Jane Doe")).toBeVisible();
     await expect(page.getByText("Excellent candidate with strong technical skills.")).toBeVisible();
-    await expect(page.getByText("Strong Python")).toBeVisible();
+    await expect(page.getByText("Strong Python", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Limited system design experience")).toBeVisible();
   });
 

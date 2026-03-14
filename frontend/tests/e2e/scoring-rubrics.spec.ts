@@ -39,9 +39,10 @@ test.describe("Custom Scoring Rubrics", () => {
     await page.getByRole("button", { name: "New Job" }).click();
     await page.getByRole("button", { name: "+ Add Dimension" }).click();
 
-    await expect(page.getByPlaceholder("Dimension name")).toBeVisible();
-    await expect(page.getByText("Weight")).toBeVisible();
-    await expect(page.getByPlaceholder("Description")).toBeVisible();
+    const dimensionRow = page.locator(".rounded-lg.border.border-slate-200").filter({ hasText: "Weight" }).first();
+    await expect(dimensionRow.getByPlaceholder("Dimension name")).toBeVisible();
+    await expect(dimensionRow.getByText("Weight", { exact: true })).toBeVisible();
+    await expect(dimensionRow.getByPlaceholder("Description")).toBeVisible();
   });
 
   test("remove dimension button removes the row", async ({ page }) => {
@@ -62,8 +63,6 @@ test.describe("Custom Scoring Rubrics", () => {
 
     await page.getByRole("button", { name: "+ Code Quality" }).click();
 
-    await expect(page.getByPlaceholder("Dimension name").first()).toHaveValue(
-      "Code Quality"
-    );
+    await expect(page.getByPlaceholder("Dimension name")).toHaveValue("Code Quality", { timeout: 5000 });
   });
 });

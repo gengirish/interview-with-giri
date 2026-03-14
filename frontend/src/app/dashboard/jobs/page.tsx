@@ -172,7 +172,7 @@ export default function JobsPage() {
     };
     setForm({
       ...form,
-      title: "",
+      title: t.name,
       role_type: t.role_type,
       job_description: t.job_description_template ?? "",
       required_skills: Array.isArray(t.required_skills)

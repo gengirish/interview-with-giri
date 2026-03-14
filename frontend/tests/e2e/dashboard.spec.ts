@@ -31,25 +31,56 @@ test.describe("Dashboard", () => {
   });
 
   test("navigation sidebar links work", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/");
+    await page.evaluate(() => {
+      const allTours = [
+        "dashboard-overview",
+        "jobs-page",
+        "interviews-page",
+        "interview-detail",
+        "reports-page",
+        "compare-page",
+        "analytics-page",
+        "settings-page",
+        "team-page",
+      ];
+      const completed = Object.fromEntries(allTours.map((t) => [t, true]));
+      localStorage.setItem(
+        "walkthrough_progress",
+        JSON.stringify({ completed, skipped: {}, version: 1 })
+      );
+    });
     await page.goto("/dashboard");
 
-    await page.getByRole("link", { name: "Jobs" }).click();
-    await expect(page).toHaveURL(/\/dashboard\/jobs/);
+    const sidebar = page.getByTestId("sidebar");
+    await sidebar.getByRole("link", { name: "Jobs" }).click();
+    await expect(page).toHaveURL(/\/dashboard\/jobs/, { timeout: 5000 });
 
-    await page.getByRole("link", { name: "Interviews" }).click();
-    await expect(page).toHaveURL(/\/dashboard\/interviews/);
+    await Promise.all([
+      page.waitForURL(/\/dashboard\/interviews/, { timeout: 5000 }),
+      sidebar.getByRole("link", { name: "Interviews" }).click(),
+    ]);
 
-    await page.getByRole("link", { name: "Analytics" }).click();
-    await expect(page).toHaveURL(/\/dashboard\/analytics/);
+    await Promise.all([
+      page.waitForURL(/\/dashboard\/analytics/, { timeout: 5000 }),
+      sidebar.getByRole("link", { name: "Analytics" }).click(),
+    ]);
 
-    await page.getByRole("link", { name: "Settings" }).click();
-    await expect(page).toHaveURL(/\/dashboard\/settings/);
+    await Promise.all([
+      page.waitForURL(/\/dashboard\/settings/, { timeout: 5000 }),
+      sidebar.getByRole("link", { name: "Settings" }).click(),
+    ]);
 
-    await page.getByRole("link", { name: "Team" }).click();
-    await expect(page).toHaveURL(/\/dashboard\/team/);
+    await Promise.all([
+      page.waitForURL(/\/dashboard\/team/, { timeout: 10000 }),
+      sidebar.getByRole("link", { name: "Team" }).click(),
+    ]);
 
-    await page.getByRole("link", { name: "Dashboard" }).click();
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await Promise.all([
+      page.waitForURL(/\/dashboard$/, { timeout: 10000 }),
+      sidebar.getByRole("link", { name: "Dashboard" }).click(),
+    ]);
   });
 
   test("empty state displays when no data", async ({ page }) => {

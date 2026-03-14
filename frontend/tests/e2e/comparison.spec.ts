@@ -127,9 +127,10 @@ test.describe("Candidate Comparison Dashboard", () => {
     await page.goto("/dashboard/compare");
 
     await expect(page.getByRole("heading", { name: "Candidate Comparison" })).toBeVisible();
-    await expect(page.getByText("Job")).toBeVisible();
+    const jobLabel = page.locator("label").filter({ hasText: /^Job$/ });
+    await expect(jobLabel).toBeVisible();
     await expect(page.getByRole("combobox")).toBeVisible();
-    await expect(page.getByText("Senior Backend Engineer")).toBeVisible();
+    await expect(page.getByRole("combobox").filter({ hasText: "Senior Backend Engineer" })).toBeVisible();
   });
 
   test("selecting a job loads candidate comparison data", async ({ page }) => {
@@ -145,11 +146,12 @@ test.describe("Candidate Comparison Dashboard", () => {
     await page.goto("/dashboard/compare");
 
     await expect(page.getByText("Alice Smith")).toBeVisible({ timeout: 5000 });
-    await expect(page.getByRole("columnheader", { name: /Name/i })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: /Score/i })).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: /Recommendation/i })).toBeVisible();
+    const table = page.locator("table");
+    await expect(table.getByRole("columnheader", { name: /Name/i }).first()).toBeVisible();
+    await expect(table.getByRole("columnheader", { name: /Score/i }).first()).toBeVisible();
+    await expect(table.getByRole("columnheader", { name: /Recommendation/i }).first()).toBeVisible();
 
-    await page.getByRole("columnheader", { name: /Name/i }).click();
+    await table.getByRole("columnheader", { name: /Name/i }).first().click();
     await expect(page.getByText("Alice Smith")).toBeVisible();
   });
 
@@ -204,7 +206,7 @@ test.describe("Candidate Comparison Dashboard", () => {
     await page.goto("/dashboard/compare");
 
     await expect(page.getByRole("heading", { name: "Candidate Comparison" })).toBeVisible();
-    await expect(page.getByText("No completed interviews")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole("heading", { name: "No completed interviews" })).toBeVisible({ timeout: 5000 });
     await expect(
       page.getByText("This job has no completed interviews yet. Run interviews and complete them to compare")
     ).toBeVisible();

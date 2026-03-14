@@ -71,7 +71,7 @@ async def _setup_two_completed_interviews(client, db):
     result = await db.execute(
         select(InterviewSession.id).where(InterviewSession.token.in_([token1, token2]))
     )
-    ids = [str(r.id) for r in result.scalars().all()]
+    ids = [str(row[0]) for row in result.scalars().all()]
     return ids, headers
 
 

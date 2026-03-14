@@ -195,8 +195,8 @@ test.describe("White-Label Branding", () => {
 
     await page.goto("/interview/test-token-branding");
 
-    await expect(page.getByText("Acme Corp")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole("heading", { name: "Acme Corp" })).toBeVisible({ timeout: 10000 });
     await expect(page.getByText("Hire smarter")).toBeVisible();
-    await expect(page.getByText("Senior Engineer")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Senior Engineer" })).toBeVisible();
   });
 });

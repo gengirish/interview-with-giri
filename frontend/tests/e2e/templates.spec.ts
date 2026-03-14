@@ -98,12 +98,12 @@ test.describe("Interview Templates", () => {
     await page.getByRole("button", { name: "New Job" }).click();
     await page.getByRole("button", { name: "Use Template" }).click();
 
-    await page
-      .getByRole("button", { name: /Senior React Developer/ })
-      .click();
+    await expect(page.getByText("Senior React Developer")).toBeVisible({ timeout: 5000 });
+    await page.getByRole("button", { name: /Senior React Developer/ }).first().click();
 
     await expect(page.getByLabel("Job Title")).toHaveValue(
-      "Senior React Developer"
+      "Senior React Developer",
+      { timeout: 5000 }
     );
     await expect(page.getByLabel("Job Description")).toContainText(
       "We are looking for a Senior React Developer"
