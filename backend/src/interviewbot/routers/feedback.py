@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from uuid import UUID
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from interviewbot.dependencies import get_db, get_org_id, require_role
+from interviewbot.dependencies import get_db
 from interviewbot.models.tables import CandidateFeedback, InterviewSession
 
 router = APIRouter(prefix="/interviews", tags=["Feedback"])

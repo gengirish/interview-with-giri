@@ -85,8 +85,11 @@ export function WalkthroughProvider({
   const [steps, setSteps] = useState<Step[]>([]);
   const [currentTourId, setCurrentTourId] = useState<string | null>(null);
   const [activeTour, setActiveTour] = useState<TourDefinition | null>(null);
+  const [mounted, setMounted] = useState(false);
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const serverSyncedRef = useRef(false);
+
+  useEffect(() => setMounted(true), []);
 
   // Sync FROM server on mount (merge with localStorage)
   useEffect(() => {
@@ -210,13 +213,11 @@ export function WalkthroughProvider({
   const resetTour = useCallback(
     (tourId: string) => {
       setState((prev) => {
-        const { [tourId]: _c, ...restCompleted } = prev.completed;
-        const { [tourId]: _s, ...restSkipped } = prev.skipped;
-        const next: WalkthroughState = {
-          ...prev,
-          completed: restCompleted,
-          skipped: restSkipped,
-        };
+        const completed = { ...prev.completed };
+        const skipped = { ...prev.skipped };
+        delete completed[tourId];
+        delete skipped[tourId];
+        const next: WalkthroughState = { ...prev, completed, skipped };
         writeLocalState(next);
         syncToServerDebounced(next);
         return next;
@@ -284,31 +285,33 @@ export function WalkthroughProvider({
   return (
     <WalkthroughContext.Provider value={contextValue}>
       {children}
-      <Joyride
-        steps={steps}
-        run={run}
-        continuous
-        showSkipButton
-        showProgress
-        scrollToFirstStep
-        disableOverlayClose
-        tooltipComponent={CustomTooltip}
-        callback={handleJoyrideCallback}
-        styles={{
-          options: {
-            zIndex: 10000,
-            arrowColor: "#ffffff",
-            overlayColor: "rgba(0, 0, 0, 0.4)",
-          },
-        }}
-        locale={{
-          back: "Back",
-          close: "Close",
-          last: "Done",
-          next: "Next",
-          skip: "Skip tour",
-        }}
-      />
+      {mounted && (
+        <Joyride
+          steps={steps}
+          run={run}
+          continuous
+          showSkipButton
+          showProgress
+          scrollToFirstStep
+          disableOverlayClose
+          tooltipComponent={CustomTooltip}
+          callback={handleJoyrideCallback}
+          styles={{
+            options: {
+              zIndex: 10000,
+              arrowColor: "#ffffff",
+              overlayColor: "rgba(0, 0, 0, 0.4)",
+            },
+          }}
+          locale={{
+            back: "Back",
+            close: "Close",
+            last: "Done",
+            next: "Next",
+            skip: "Skip tour",
+          }}
+        />
+      )}
     </WalkthroughContext.Provider>
   );
 }

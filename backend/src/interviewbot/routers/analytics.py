@@ -10,7 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from interviewbot.dependencies import get_db, get_org_id, require_role
 from interviewbot.models.schemas import AnalyticsOverviewResponse, JobAnalyticsResponse
-from interviewbot.models.tables import CandidateFeedback, CandidateReport, InterviewSession, JobPosting
+from interviewbot.models.tables import (
+    CandidateFeedback,
+    CandidateReport,
+    InterviewSession,
+    JobPosting,
+)
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
